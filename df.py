@@ -1,2 +1,1 @@
-print("abc")
-print("def")
+print("안녕하세요")
