@@ -1,2 +1,1 @@
 print("banana")
-print("apple")
