@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Snaplog 맵</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+    <style>
+      #map { height: 75vh; }
+      .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+      .toolbar input { padding: 6px 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>클러스터링 맵</h1>
+      <div class="toolbar card">
+        <label>시작</label>
+        <input id="start" type="datetime-local" />
+        <label>종료</label>
+        <input id="end" type="datetime-local" />
+        <button id="apply">적용</button>
+        <a href="/" class="link">업로드로 이동</a>
+      </div>
+      <div id="map" class="card"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="/static/js/app.js"></script>
+  </body>
+  </html>
+
+

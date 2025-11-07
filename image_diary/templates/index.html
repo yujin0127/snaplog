@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Diary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>My Image Diary</h1>
+        <div class="nav-buttons">
+            <a href="{{ url_for('add_entry') }}" class="button">Add New Entry</a>
+            <a href="{{ url_for('show_map') }}" class="button">View Clustered Map</a>
+        </div>
+        
+        <div class="entries">
+            {% for entry in entries %}
+            <div class="entry">
+                <h2>{{ entry[1] }}</h2>
+                {% if entry[3] %}
+                <img src="{{ url_for('static', filename=entry[3].replace('static/', '')) }}" alt="Diary Image">
+                {% endif %}
+                <p>{{ entry[2] }}</p>
+                <p class="date">Date taken: {{ entry[4] }}</p>
+                {% if entry[5] and entry[6] %}
+                <p class="location">Location: {{ entry[5] }}, {{ entry[6] }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
