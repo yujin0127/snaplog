@@ -275,7 +275,7 @@ html[data-theme="dark"] .calendar .cell.saved{
   "use strict";
 
   // === Auto-generate integration ===
-  const API_URL = ""; // << 서버 배포 후 '/api/auto-diary' 절대/상대경로로 지정. 비우면 오프라인 규칙 기반으로 동작.
+  const API_URL = "http://127.0.0.1:5000/api/auto-diary"; // << 서버 배포 후 '/api/auto-diary' 절대/상대경로로 지정. 비우면 오프라인 규칙 기반으로 동작.
   const FOOD_HINTS = ['food','meal','lunch','dinner','breakfast','cafe','coffee','cake','bread','noodle','ramen','pizza','burger','pasta','sushi','식당','밥','점심','저녁','아침','카페','커피','케이크','빵','라면','피자','버거','파스타','스시'];
 
   function classifyCategory(fileNames){
