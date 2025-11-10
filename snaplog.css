@@ -84,7 +84,10 @@ hr{ border:none; border-top:1px solid var(--line); }
 }
 
 .daily_button{ width:100%; height: 50px; font-size:18px; border-radius:18px; }
-@media (max-width:640px){  .daily_button{ height:50px; font-size:17px;  .ghost{ width:90%; max-width:360px; } } }
+@media (max-width:640px){
+  .daily_button{ height:50px; font-size:17px; }
+  .ghost{ width:90%; max-width:360px; }
+}
 
 /* gallery */
 .gallery{ display:flex; gap:10px; align-items:center; overflow-x:auto; overflow-y:hidden; padding:8px 2px; margin-top:10px; max-width:100%; box-sizing:border-box; -webkit-overflow-scrolling:touch }
@@ -118,4 +121,50 @@ html[data-theme="dark"] .calendar .cell.saved{
   align-items: center;
   justify-content: center;
   gap: 2px !important;
+}
+/* 기존 CSS에 추가할 스타일 */
+
+/* 캘린더 셀 - 선택된 날짜 */
+.calendar .cell.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* 다크모드에서 선택된 날짜 */
+[data-theme="dark"] .calendar .cell.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+}
+
+/* 선택된 날짜에 마우스 오버 */
+.calendar .cell.selected:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+/* 선택된 날짜이면서 오늘인 경우 */
+.calendar .cell.selected.today {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #fbbf24;
+}
+
+/* 선택된 날짜이면서 저장된 경우 */
+.calendar .cell.selected.saved::after {
+  background: white;
+}
+
+/* 선택된 날짜 표시 텍스트 스타일 */
+#selectedDate {
+  color: #667eea;
+  font-size: 0.9em;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+[data-theme="dark"] #selectedDate {
+  color: #a78bfa;
 }
