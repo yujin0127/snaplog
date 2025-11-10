@@ -1,10 +1,11 @@
 """Snaplog server — 3단계(분석→초안→보정)로 20~30대 자연체 일기 생성"""
 
 from __future__ import annotations
-import os, re, json, random, traceback
+import os, re, json, random, traceback, time
+from threading import Lock
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 # ---------------- Flask ----------------
 app = Flask(__name__)
@@ -19,6 +20,47 @@ client = OpenAI(api_key=API_KEY)
 MODEL_VISION = "gpt-4o-mini"
 MODEL_TEXT   = "gpt-4o-mini"
 MAX_IMAGES   = 10
+THROTTLE_SECONDS = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0.5"))
+MAX_WAIT_SECONDS = float(os.getenv("OPENAI_MAX_WAIT_SECONDS", "30"))
+_last_call_ts = 0.0
+_throttle_lock = Lock()
+
+
+def throttled_chat_completion(**kwargs):
+    global _last_call_ts
+    backoff = THROTTLE_SECONDS
+    last_error: RateLimitError | None = None
+    total_wait = 0.0
+    while total_wait <= MAX_WAIT_SECONDS:
+        # 최소 호출 간격 확보
+        with _throttle_lock:
+            wait = THROTTLE_SECONDS - (time.monotonic() - _last_call_ts)
+        if wait > 0:
+            time.sleep(wait)
+            total_wait += wait
+
+        retry_secs = THROTTLE_SECONDS
+        with _throttle_lock:
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                _last_call_ts = time.monotonic()
+                return resp
+            except RateLimitError as e:
+                last_error = e
+                msg = str(e) or ""
+                retry_ms_match = re.search(r"try again in\s+(\d+)\s*ms", msg, re.I)
+                if retry_ms_match:
+                    retry_secs = max(retry_secs, float(retry_ms_match.group(1)) / 1000.0)
+                else:
+                    retry_secs = max(retry_secs, backoff)
+                _last_call_ts = time.monotonic() + retry_secs
+
+        time.sleep(retry_secs)
+        total_wait += retry_secs
+        backoff = min(backoff * 2, THROTTLE_SECONDS * 16)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Rate limit exhausted without meaningful error")
 
 # ---------------- 금지/정리 유틸 ----------------
 FILE_RE = re.compile(r"\b[\w\-]+\.(jpg|jpeg|png|webp|heic)\b", re.I)
@@ -100,7 +142,7 @@ def analyze_images(images: list[str]) -> dict | None:
         url = data_url if data_url.startswith("data:image") else f"data:image/jpeg;base64,{data_url}"
         content.append({"type":"image_url","image_url":{"url": url, "detail":"high"}})
 
-    r = client.chat.completions.create(
+    r = throttled_chat_completion(
         model=MODEL_VISION,
         temperature=0.0,
         max_tokens=700,
@@ -181,7 +223,7 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
 - 톤: {tone or "중립"} (과장 금지, 담백하게).
 """
 
-    r = client.chat.completions.create(
+    r = throttled_chat_completion(
         model=MODEL_TEXT,
         temperature=0.35,
         top_p=0.9,
@@ -217,7 +259,7 @@ def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: st
 
 출력은 최종 문단만.
 """
-    r = client.chat.completions.create(
+    r = throttled_chat_completion(
         model=MODEL_TEXT,
         temperature=0.25,
         max_tokens=700,
@@ -247,7 +289,7 @@ def generate_from_lines(lines: list[str], tone: str) -> str:
 - 톤: {tone or "중립"}.
 - 한 단락만 출력.
 """
-    r = client.chat.completions.create(
+    r = throttled_chat_completion(
         model=MODEL_TEXT,
         temperature=0.35,
         max_tokens=600,
@@ -309,6 +351,23 @@ def api_auto_dairy():
                     "category": category_hint,
                     "used": "fallback"
                 })
+            except RateLimitError as e:
+                msg = getattr(e, "message", None) or str(e) or "rate_limit"
+                retry_ms = None
+                body = getattr(e, "body", {}) or {}
+                err = body.get("error") if isinstance(body, dict) else {}
+                if isinstance(err, dict):
+                    retry_ms = err.get("retry_after")
+                if retry_ms is None:
+                    match = re.search(r"try again in\s+(\d+)\s*ms", msg, re.I)
+                    if match:
+                        retry_ms = int(match.group(1))
+                return jsonify({
+                    "ok": False,
+                    "error": "rate_limit",
+                    "message": msg,
+                    "retry_after_ms": retry_ms
+                }), 429
             except Exception as e:
                 traceback.print_exc()
                 category_hint = "journey_multi" if len(images) > 1 else "general_single"
