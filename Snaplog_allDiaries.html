@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>스냅로그 | 전체 일기 목록</title>
+  <link rel="stylesheet" href="mainpage.css">
+  <style>
+    /* 추가적인 레이아웃/스타일 보완 (mainpage.css와 충돌 없게 최소한으로) */
+    .layout { display:grid; grid-template-columns: 300px 1fr; gap:16px; padding:16px; }
+    /* 오른쪽: 목록 영역 스타일 */
+    .list-area { display:flex; flex-direction:column; gap:12px; }
+    .filter-bar { display:flex; gap:8px; align-items:center; }
+    .filter-bar input[type="date"], .filter-bar input[type="text"]{
+      padding:10px; border-radius:10px; border:1px solid var(--line-strong); background:var(--card);
+      outline:none; min-width:160px;
+    }
+    .filter-bar .btn { height:48px; padding:10px 14px; border-radius:12px; }
+    .results { display:flex; flex-direction:column; gap:10px; max-height:56vh; overflow:auto; padding-right:6px; }
+    .diary-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-radius:12px; border:1px solid var(--line); background:var(--panel); }
+    .diary-left { display:flex; gap:12px; align-items:center; }
+    .thumb-sm { width:64px; height:64px; object-fit:cover; border-radius:10px; border:1px solid var(--line); background:#eee; }
+    .meta { display:flex; flex-direction:column; min-width:0; }
+    .meta .title { font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .meta .date { font-size:12px; color:var(--muted); margin-top:4px; }
+    .meta .excerpt { font-size:13px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pager { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:8px; }
+    .pager .btn { padding:8px 12px; height:40px; border-radius:10px; }
+    /* 모달 (기존 스타일 유지) */
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.25); align-items:center; justify-content:center; padding:20px; z-index:60; }
+    .modal .card { width:min(900px, 96vw); max-height:80vh; overflow:auto; }
+    /* 반응형 보완 */
+    @media (max-width:900px){ .layout{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="bg">
+    <div class="panel" id="appPanel" style="display:block;">
+      <!-- 상단 -->
+      <div class="topbar">
+        <div class="brand">스냅로그</div>
+        <span class="badge" id="statAll">전체 0</span>
+        <span class="badge" id="statMonth">이번 달 0</span>
+        <span class="badge" id="statPhotos">사진 0</span>
+        <div class="spacer"></div>
+        <div class="toggle" title="다크모드">
+          <span aria-hidden="true" class="label">다크모드</span>
+          <label class="switch">
+            <input id="darkToggleApp" type="checkbox"/>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <a class="btn ghost" href="Snaplog_test3.html" style="margin-left:12px;">작성하러 가기</a>
+      </div>
+
+      <!-- 레이아웃: 왼쪽 달력 / 오른쪽 목록 -->
+      <div class="layout" id="layout">
+        <!-- LEFT: 달력 + 최근 기록 (기존 Snaplog 구조 유지) -->
+        <aside class="card" style="padding-bottom:12px;">
+          <div class="section-title">달력</div>
+          <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
+            <button class="btn ghost" id="prevM">◀︎</button>
+            <div id="ym"></div>
+            <button class="btn ghost" id="nextM">▶︎</button>
+          </div>
+          <div class="calendar" id="calendar"></div>
+
+          <hr style="opacity:.6; margin:12px 0"/>
+          <div class="section-title">최근 기록</div>
+          <div class="list small" id="recent"></div>
+        </aside>
+
+        <!-- RIGHT: 필터 + 전체목록 (오늘의 기록 영역 대체) -->
+        <section class="card">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div class="section-title">전체 일기 목록</div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input id="filterDate" type="date" style="height:40px; border-radius:10px; padding:8px;" />
+              <input id="searchInput" type="text" placeholder="제목/내용 검색" style="height:40px; border-radius:10px; padding:8px;" />
+              <button id="resetBtn" class="btn ghost">초기화</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div class="results" id="results"></div>
+            <div class="pager" id="pager">
+              <button id="prevPage" class="btn ghost">이전</button>
+              <div id="pageInfo" class="small" style="align-self:center;"></div>
+              <button id="nextPage" class="btn ghost">다음</button>
+            </div>
+          </div>
+
+          <!-- 하단 탭 (원래 구조 유지) -->
+          <div class="tabs" style="margin-top:14px;">
+            <div class="tab">일기</div>
+            <div class="tab">지도</div>
+            <div class="tab active">전체일기</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모달: 상세보기 -->
+  <div id="modal" class="modal">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);">
+        <div>
+          <strong id="m-title">제목</strong>
+          <div class="small" id="m-date"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="closeModal" class="btn ghost">닫기</button>
+        </div>
+      </div>
+      <div style="padding:14px;">
+        <div id="m-body" style="white-space:pre-wrap;line-height:1.6;"></div>
+        <div id="m-gallery" class="gallery" style="margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ======= 유틸 (mainpage와 동일한 load/save 함수) =======
+  function saveLS(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn("save fail",k,e); } }
+  function loadLS(k,f){ try{ const v=localStorage.getItem(k); return v? JSON.parse(v): f; }catch(e){ return f; } }
+  function parseYMD(s){ const [y,m,d] = (s||"").split("-").map(x=>parseInt(x,10)); return {y,m,d}; }
+
+  // ======= 상태 =======
+  const state = {
+    entries: loadLS('entries', []), // 기존 Snaplog가 사용하던 키: 'entries'
+    theme: loadLS('theme','light'),
+    cal: new Date(),
+    // 목록 관련
+    filtered: [],
+    page: 1,
+    perPage: 15,
+    activeDateFilter: '', // yyyy-mm-dd
+    activeKeyword: ''
+  };
+
+  // ======= 테마 적용 =======
+  function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); saveLS('theme', t); }
+  applyTheme(state.theme);
+
+  const darkToggleApp = document.getElementById('darkToggleApp');
+  if(darkToggleApp){
+    darkToggleApp.checked = state.theme==='dark';
+    darkToggleApp.addEventListener('change', ()=>{
+      state.theme = darkToggleApp.checked?'dark':'light';
+      applyTheme(state.theme);
+    });
+  }
+
+  // ======= 통계 렌더 =======
+  function renderStats(){
+    try{
+      const all = state.entries.length;
+      const monthKey = (new Date().getFullYear()) + "-" + String(new Date().getMonth()+1).padStart(2,'0');
+      const month = state.entries.filter(e=> (e.date||"").startsWith(monthKey)).length;
+      const photos = state.entries.filter(e=> Array.isArray(e.photos) ? e.photos.length : (e.photo?1:0)).length;
+      const a=$('#statAll'), m=$('#statMonth'), p=$('#statPhotos');
+      if(a) a.textContent = `전체 ${all}`;
+      if(m) m.textContent = `이번 달 ${month}`;
+      if(p) p.textContent = `사진 ${photos}`;
+    }catch(e){ console.warn('renderStats error', e); }
+  }
+
+  // ======= 캘린더 렌더 (Snaplog와 동일 로직) =======
+  function renderCalendar(){
+    try{
+      const cal = $('#calendar'); if(!cal) return;
+      cal.innerHTML='';
+      const ym = $('#ym');
+      const cur = new Date(state.cal.getFullYear(), state.cal.getMonth(), 1);
+      if(ym) ym.textContent = `${cur.getFullYear()}년 ${String(cur.getMonth()+1).padStart(2,'0')}월`;
+
+      const daysHeader = ['일','월','화','수','목','금','토'];
+      daysHeader.forEach(d=>{ const h=document.createElement('div'); h.className='cell head'; h.textContent=d; cal.appendChild(h); });
+
+      const firstDay = new Date(cur.getFullYear(), cur.getMonth(), 1).getDay();
+      const lastDate = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+
+      for(let i=0;i<firstDay;i++){ const e=document.createElement('div'); e.className='cell head'; e.style.visibility='hidden'; cal.appendChild(e); }
+
+      const saved = new Set(state.entries.filter(e=>{ if(!e.date) return false; const {y,m} = parseYMD(e.date); return y===cur.getFullYear() && m===cur.getMonth()+1; }).map(e=> parseYMD(e.date).d));
+
+      const today=new Date();
+      for(let d=1; d<=lastDate; d++){
+        const cell=document.createElement('div'); cell.className='cell'; cell.textContent=String(d);
+        if(saved.has(d)) cell.classList.add('saved');
+        if(d===today.getDate() && cur.getMonth()===today.getMonth() && cur.getFullYear()===today.getFullYear()) cell.classList.add('today');
+        cell.onclick=()=>{ 
+          state.cal = new Date(cur.getFullYear(), cur.getMonth(), d);
+          const key = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          // 날짜 클릭 → 오른쪽 목록 필터 적용
+          state.activeDateFilter = key;
+          $('#filterDate').value = key;
+          state.page = 1;
+          applyFiltersAndRender();
+        };
+        cal.appendChild(cell);
+      }
+    }catch(e){ console.warn('renderCalendar error', e); }
+  }
+
+  // ======= 최근 기록 렌더 (좌측) =======
+  function renderRecent(){
+    try{
+      const box = $('#recent'); if(!box) return;
+      box.innerHTML='';
+      const arr = state.entries.slice().reverse().slice(0,50);
+      if(arr.length===0){ box.innerHTML = '<div class="small">최근 기록이 없습니다.</div>'; return; }
+      arr.forEach(e=>{
+        const it=document.createElement('div'); it.className='item';
+        const left=document.createElement('div'); left.innerHTML = `<div><strong>${e.title || '제목 없음'}</strong></div><div class="small">${e.date || ''}</div>`;
+        const right=document.createElement('button'); right.className='btn ghost'; right.textContent='보기';
+        right.onclick=()=>{
+          openModal(e);
+        };
+        it.append(left,right); box.appendChild(it);
+      });
+    }catch(e){ console.warn('renderRecent error', e); }
+  }
+
+  // ======= 모달 상세보기 =======
+  function openModal(e){
+    const m = $('#modal'); if(!m) return;
+    m.style.display='flex';
+    $('#m-title').textContent = e.title || '제목 없음';
+    $('#m-date').textContent = e.date || '';
+    $('#m-body').textContent = e.body || e.text || '';
+    const gallery = $('#m-gallery'); gallery.innerHTML='';
+    const photos = Array.isArray(e.photos) ? e.photos : (e.photo ? [e.photo] : []);
+    photos.forEach(src=>{
+      const d = document.createElement('div'); d.style.flex='0 0 auto'; d.style.width='140px'; d.style.height='140px'; d.style.borderRadius='10px'; d.style.overflow='hidden'; d.style.border='1px solid var(--line)'; d.style.marginRight='8px';
+      const im = document.createElement('img'); im.src = src; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover';
+      d.appendChild(im); gallery.appendChild(d);
+    });
+  }
+  $('#closeModal')?.addEventListener('click', ()=>{ $('#modal').style.display='none'; });
+
+  // ======= 결과 목록 렌더 (오른쪽) =======
+  function excerpt(s, n=180){ if(!s) return ''; return s.length>n? s.slice(0,n-1)+'…': s; }
+
+  function renderResults(){
+    const container = $('#results'); if(!container) return;
+    container.innerHTML = '';
+    const total = state.filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.perPage));
+    if(state.page > totalPages) state.page = totalPages;
+
+    const start = (state.page - 1) * state.perPage;
+    const end = start + state.perPage;
+    const pageItems = state.filtered.slice(start, end);
+
+    if(pageItems.length === 0){
+      container.innerHTML = `<div style="text-align:center; color:var(--muted); padding:18px;">표시할 일기가 없습니다.</div>`;
+    } else {
+      pageItems.forEach(e=>{
+        const row = document.createElement('div'); row.className = 'diary-row';
+        const left = document.createElement('div'); left.className='diary-left';
+        const img = document.createElement('img'); img.className='thumb-sm';
+        const thumb = (e.photos && e.photos.length) ? e.photos[0] : (e.photo || '');
+        if(thumb) img.src = thumb; else img.style.display='none';
+        const meta = document.createElement('div'); meta.className='meta';
+        const t = document.createElement('div'); t.className='title'; t.textContent = e.title || '제목 없음';
+        const d = document.createElement('div'); d.className='date'; d.textContent = e.date || '';
+        const ex = document.createElement('div'); ex.className='excerpt'; ex.textContent = excerpt(e.body || e.text || '');
+        meta.appendChild(t); meta.appendChild(d); meta.appendChild(ex);
+
+        left.appendChild(img); left.appendChild(meta);
+
+        const right = document.createElement('div');
+        const openBtn = document.createElement('button'); openBtn.className='btn ghost'; openBtn.textContent='열기';
+        openBtn.onclick = ()=> openModal(e);
+        right.appendChild(openBtn);
+
+        row.appendChild(left); row.appendChild(right);
+        container.appendChild(row);
+      });
+    }
+
+    // 페이저 업데이트
+    $('#pageInfo').textContent = `${state.page} / ${totalPages}`;
+    $('#prevPage').disabled = state.page <= 1;
+    $('#nextPage').disabled = state.page >= totalPages;
+  }
+
+  // ======= 필터 적용 로직 =======
+  function applyFiltersAndRender(){
+    const date = state.activeDateFilter || '';
+    const keyword = (state.activeKeyword || '').toLowerCase().trim();
+
+    state.filtered = state.entries.filter(e=>{
+      const matchDate = !date || (e.date === date);
+      const hay = ((e.title || '') + ' ' + (e.body || e.text || '')).toLowerCase();
+      const matchKeyword = !keyword || hay.includes(keyword);
+      return matchDate && matchKeyword;
+    });
+
+    // 정렬: 최신순
+    state.filtered.sort((a,b)=> (b.ts || 0) - (a.ts || 0));
+
+    renderResults();
+    renderStats();
+    renderRecent();
+    renderCalendar(); // calendar may highlight saved days
+  }
+
+  // ======= 이벤트 바인딩 =======
+  $('#filterDate').addEventListener('change', (ev)=>{
+    state.activeDateFilter = ev.target.value || '';
+    state.page = 1;
+    applyFiltersAndRender();
+  });
+
+  $('#searchInput').addEventListener('input', (ev)=>{
+    state.activeKeyword = ev.target.value || '';
+    state.page = 1;
+    applyFiltersAndRender();
+  });
+
+  $('#resetBtn').addEventListener('click', ()=>{
+    state.activeDateFilter = '';
+    state.activeKeyword = '';
+    $('#filterDate').value = '';
+    $('#searchInput').value = '';
+    state.page = 1;
+    applyFiltersAndRender();
+  });
+
+  $('#prevPage').addEventListener('click', ()=>{
+    if(state.page > 1){ state.page--; renderResults(); }
+  });
+  $('#nextPage').addEventListener('click', ()=>{
+    const totalPages = Math.max(1, Math.ceil(state.filtered.length / state.perPage));
+    if(state.page < totalPages){ state.page++; renderResults(); }
+  });
+
+  $('#prevM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1, 1); renderCalendar(); });
+  $('#nextM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1, 1); renderCalendar(); });
+
+  // 단축 선택: 캘린더를 통해 날짜 클릭 시 호출되는 함수도 위에서 이미 설정 (renderCalendar의 cell.onclick)
+
+  // ======= DOM 헬퍼 =======
+  function $(s,p=document){ return p.querySelector(s); }
+  function $$(s,p=document){ return Array.from((p||document).querySelectorAll(s)); }
+
+  // ======= 초기화 & 렌더 =======
+  // entries가 localStorage에 없으면 빈 배열로 유지
+  // (주의) 기존 Snaplog에서 저장한 포맷: entries 배열의 각 원소는 {id,title,body,photos,photo,date,ts,...}
+  state.entries = loadLS('entries', []);
+  // 보수적으로 date 포맷이 'yyyy-m-d'일 수 있으므로 normalize 날짜 포맷 to yyyy-mm-dd
+  state.entries = state.entries.map(e=>{
+    if(e && e.date){
+      const {y,m,d} = parseYMD(e.date);
+      if(y && m && d){
+        e.date = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      }
+    }
+    return e;
+  });
+
+  // 기본 필터: 전체
+  state.filtered = state.entries.slice().sort((a,b)=> (b.ts||0)-(a.ts||0));
+  state.page = 1;
+
+  // 초기 렌더 호출
+  renderStats();
+  renderRecent();
+  renderCalendar();
+  renderResults();
+
+})();
+</script>
+</body>
+</html>
