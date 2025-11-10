@@ -30,7 +30,7 @@ body{margin:0; color:var(--text); font-family: ui-sans-serif, -apple-system, Seg
 .intro{ padding:28px 40px 40px; text-align:center; }
 .intro .hero{ font-size:42px; font-weight:900; margin:8px 0 4px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2), var(--accent-3));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  background-clip:text; -webkit-background-clip: text; color:transparent; -webkit-text-fill-color: transparent; }
 .intro .sub{ color:var(--muted); font-size:14px; }
 .cta{ margin-top:16px; display:flex; gap:10px; justify-content:center; }
 .toggle{ display:inline-flex; align-items:center; gap:8px; }
@@ -118,4 +118,50 @@ html[data-theme="dark"] .calendar .cell.saved{
   align-items: center;
   justify-content: center;
   gap: 2px !important;
+}
+
+#autoModal{
+  position:fixed;
+  inset:0;
+  background:rgba(12,16,26,.45);
+  backdrop-filter:blur(6px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease;
+  z-index:999;
+}
+#autoModal.active{
+  opacity:1;
+  pointer-events:auto;
+}
+#autoModal .modal-card{
+  background:var(--panel);
+  border-radius:20px;
+  padding:28px 36px;
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+  min-width:220px;
+}
+#autoModal .modal-spinner{
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  border:4px solid rgba(109,89,255,.2);
+  border-top-color:var(--accent);
+  animation:snaplog-spin .8s linear infinite;
+}
+#autoModal .modal-text{
+  font-size:16px;
+  font-weight:700;
+  color:var(--text);
+}
+@keyframes snaplog-spin{
+  to{ transform:rotate(360deg); }
 }

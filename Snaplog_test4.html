@@ -16,7 +16,7 @@
      <div class="hero">스냅로그</div>
      <div class="sub">사진으로 남기는 오늘의 순간</div>
      <div class="cta">
-      <button class="btn" id="startBtn">시작하기</button>
+      <button class="btn" id="startBtn" type="button">시작하기</button>
      </div>
     </div>
    </div>
@@ -40,9 +40,9 @@
      <aside class="card">
       <div class="section-title">달력</div>
       <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
-       <button class="btn ghost" id="prevM">◀︎</button>
+       <button class="btn ghost" id="prevM" type="button">◀︎</button>
        <div id="ym"></div>
-       <button class="btn ghost" id="nextM">▶︎</button>
+       <button class="btn ghost" id="nextM" type="button">▶︎</button>
       </div>
       <div class="calendar" id="calendar"></div>
       <hr style="opacity:.6; margin:12px 0"/>
@@ -56,16 +56,16 @@
         사진 업로드
         <input accept="image/*" id="file" multiple type="file"/>
        </label>
-       <button class="btn daily_button" id="autoBtn">자동 생성</button>
-       <button class="btn daily_button" id="saveBtn">저장</button>
-       <button class="btn ghost daily_button" id="delBtn">삭제</button>
+       <button class="btn daily_button" id="autoBtn" type="button">자동 생성</button>
+       <button class="btn daily_button" id="saveBtn" type="button">저장</button>
+       <button class="btn ghost daily_button" id="delBtn" type="button">삭제</button>
       </div>
       <div style="margin-top:10px; position:relative">
        <div class="preview-wrap" id="previewWrap">
         <span class="ph">미리보기</span>
         <img alt="미리보기" class="preview" id="preview"/>
-        <button class="nav-arrow" id="navPrev">‹</button>
-        <button class="nav-arrow" id="navNext">›</button>
+        <button class="nav-arrow" id="navPrev" type="button">‹</button>
+        <button class="nav-arrow" id="navNext" type="button">›</button>
        </div>
        <div class="gallery" id="galleryBar">
         <div class="camera-tile" id="cameraTile">
@@ -88,6 +88,12 @@
       </div>
      </section>
     </div>
+   </div>
+  </div>
+  <div class="modal-backdrop" id="autoModal">
+   <div class="modal-card">
+    <div class="modal-spinner"></div>
+    <div class="modal-text">자동생성 중...</div>
    </div>
   </div>
   <script src="snaplog.js"></script>

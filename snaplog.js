@@ -42,8 +42,10 @@
   function saveLS(k, v) {
     try {
       localStorage.setItem(k, JSON.stringify(v));
+      return true;
     } catch (e) {
       console.warn("save fail", k, e);
+      return false;
     }
   }
   function loadLS(k, f) {
@@ -537,6 +539,18 @@
       });
     }
 
+    const autoModal = $("#autoModal");
+    const autoModalText = autoModal ? autoModal.querySelector(".modal-text") : null;
+    const toggleAutoModal = (show, text) => {
+      if (!autoModal) return;
+      if (text && autoModalText) autoModalText.textContent = text;
+      if (show) {
+        autoModal.classList.add("active");
+      } else {
+        autoModal.classList.remove("active");
+      }
+    };
+
     // 인트로 → 앱 전환
     const intro = $("#intro");
     const app = $("#app");
@@ -665,64 +679,86 @@
         const photosSummary = buildPhotosSummary(state);
         const tone = state.tone || "중립";
 
-        const api = await callAutoDiaryAPI(
-          images,
-          photosSummary,
-          tone,
-          imagesMeta
-        );
-        if (!api) {
-          return;
+        toggleAutoModal(true, "자동생성 중...");
+        try {
+          const api = await callAutoDiaryAPI(
+            images,
+            photosSummary,
+            tone,
+            imagesMeta
+          );
+          if (!api) {
+            return;
+          }
+          const category = classifyCategory(state.tempNames || []);
+          const resultText =
+            api.body || fallbackGenerate(photosSummary, category);
+          const ta = $("#text");
+          if (ta) ta.value = resultText;
+        } finally {
+          toggleAutoModal(false);
         }
-        const category = classifyCategory(state.tempNames || []);
-        const resultText =
-          api.body || fallbackGenerate(photosSummary, category);
-        const ta = $("#text");
-        if (ta) ta.value = resultText;
       });
     }
 
     // 저장
     const saveBtn = $("#saveBtn");
     if (saveBtn) {
-      saveBtn.addEventListener("click", () => {
-        try {
-          const body = ($("#text")?.value || "").trim();
-          const ti = $("#title");
-          const title = (ti && ti.value ? ti.value : "제목 없음").slice(0, 20);
-          if (!body) {
-            alert("일기 내용이 비어 있습니다.");
-            return;
-          }
-          const now = new Date();
-          const entry = {
-            id: state.cursor || newId(),
-            title,
-            body,
-            photo: state.tempPhotos[state.repIndex] || "",
-            photos: state.tempPhotos.slice(0, MAX_UPLOAD),
-            repIndex: state.repIndex,
-            notes: buildPhotosSummary(state),
-            tone: state.tone || "중립",
-            date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
-              2,
-              "0"
-            )}-${String(now.getDate()).padStart(2, "0")}`,
-            ts: now.getTime(),
-          };
-          const idx = state.entries.findIndex((e) => e.id === entry.id);
-          if (idx >= 0) state.entries[idx] = entry;
-          else state.entries.push(entry);
-          state.cursor = entry.id;
-          saveLS("entries", state.entries);
-          renderRecent();
-          renderStats();
-          renderCalendar();
-          reflectCurrent();
-        } catch (e) {
-          console.error(e);
-          alert("저장 중 오류가 발생했습니다.");
+      saveBtn.addEventListener("click", (ev) => {
+        if (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
         }
+        const body = ($("#text")?.value || "").trim();
+        if (!body) {
+          alert("일기 내용이 비어 있습니다.");
+          return;
+        }
+
+        const ti = $("#title");
+        const title = (ti && ti.value ? ti.value : "제목 없음").slice(0, 20);
+        const now = new Date();
+
+        const entry = {
+          id: state.cursor || newId(),
+          title,
+          body,
+          photo: state.tempPhotos[state.repIndex] || "",
+          photos: state.tempPhotos.slice(0, MAX_UPLOAD),
+          repIndex: state.repIndex,
+          notes: buildPhotosSummary(state),
+          tone: state.tone || "중립",
+          date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+            2,
+            "0"
+          )}-${String(now.getDate()).padStart(2, "0")}`,
+          ts: now.getTime(),
+        };
+
+        const previousEntries = state.entries.slice();
+        const idx = state.entries.findIndex((e) => e.id === entry.id);
+        if (idx >= 0) state.entries[idx] = entry;
+        else state.entries.push(entry);
+
+        const stored = saveLS("entries", state.entries);
+        if (!stored) {
+          state.entries = previousEntries;
+          alert(
+            "저장 공간이 가득 찼습니다. 다른 기록을 삭제하거나 사진 수/용량을 줄인 뒤 다시 시도해 주세요."
+          );
+          return;
+        }
+
+        state.cursor = entry.id;
+        state.photoItems = entry.photos.map((dataURL, i) => ({
+          dataURL,
+          name: state.tempNames[i] || "",
+          shotAt: state.photoItems[i]?.shotAt || now.getTime(),
+        }));
+        renderRecent();
+        renderStats();
+        renderCalendar();
+        reflectCurrent();
       });
     }
 
