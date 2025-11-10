@@ -313,7 +313,7 @@ FALLBACKS = [
 @app.get("/")
 def index():
     # 프로젝트 루트에 있는 HTML 파일 이름을 환경에 맞게 바꾸세요.
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test3.html")
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test4.html")
     if not os.path.exists(html_path):
         return f"Error: {html_path} 가 없습니다.", 404
     return send_file(html_path)
