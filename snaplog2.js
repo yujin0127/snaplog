@@ -1,40 +1,14 @@
 (function(){
     "use strict";
 
-    // ================== 설정 ==================
-    const API_URL = "http://127.0.0.1:5000/api/auto-diary";
-    const FOOD_HINTS = [
-        "food",
-        "meal",
-        "lunch",
-        "dinner",
-        "breakfast",
-        "cafe",
-        "coffee",
-        "cake",
-        "bread",
-        "noodle",
-        "ramen",
-        "pizza",
-        "burger",
-        "pasta",
-        "sushi",
-        "식당",
-        "밥",
-        "점심",
-        "저녁",
-        "아침",
-        "카페",
-        "커피",
-        "케이크",
-        "빵",
-        "라면",
-        "피자",
-        "버거",
-        "파스타",
-        "스시",
-    ];
-    const MAX_UPLOAD = 5;
+  // ================== 설정 ==================
+  const API_URL = "http://127.0.0.1:5000/api/auto-diary";
+  const FOOD_HINTS = [
+    "food","meal","lunch","dinner","breakfast","cafe","coffee","cake","bread",
+    "noodle","ramen","pizza","burger","pasta","sushi","식당","밥","점심","저녁",
+    "아침","카페","커피","케이크","빵","라면","피자","버거","파스타","스시"
+  ];
+  const MAX_UPLOAD = 5;
         
   
     // ================== 유틸 ==================
