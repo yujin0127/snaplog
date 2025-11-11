@@ -875,10 +875,31 @@
       loadEntriesToState();
     });
   
-    // ✅ 전역으로 노출
+    // ✅ loadEntry 함수를 여기로 이동 (IIFE 안쪽, window.addEventListener 밖)
+    function loadEntry(id) {
+      state.cursor = id;
+      const entry = state.entries.find(e => e.id === id);
+      if (entry && entry.date) {
+          const [y, m, d] = entry.date.split("-").map(x => parseInt(x, 10));
+          state.selectedDate = new Date(y, m - 1, d);
+          state.cal = new Date(y, m - 1, 1);
+          updateSelectedDateDisplay();
+          renderCalendar();
+      }
+      reflectCurrent();
+      
+      // ✅ 일기 로드 이벤트 발생
+      window.dispatchEvent(new CustomEvent('entryLoaded'));
+    }
+
+    // ✅ 전역으로 노출 (IIFE 맨 아래, 닫는 괄호 바로 위)
     window.snaplogAPI = {
       getAllFromIDB: getAllFromIDB,
-      getEntries: () => state.entries
+      getEntries: () => state.entries,
+      getCurrentEntry: () => {
+        if (!state.cursor) return null;
+        return state.entries.find(e => e.id === state.cursor);
+      }
     };
   
-  })();
+  })(); // ✅ IIFE 닫는 괄호
