@@ -67,6 +67,109 @@
     return { y, m, d };
   }
 
+  // ================== IndexedDB ==================
+  const HAS_INDEXED_DB = typeof indexedDB !== "undefined";
+  const IDB_DB_NAME = "snaplog-db";
+  const IDB_STORE_NAME = "entries";
+
+  function openIDB() {
+    if (!HAS_INDEXED_DB) return Promise.reject(new Error("indexedDB not supported"));
+    return new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(IDB_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
+            db.createObjectStore(IDB_STORE_NAME, { keyPath: "id" });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error("indexedDB open failed"));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function saveEntryToIDB(entry) {
+    if (!HAS_INDEXED_DB || !entry) return false;
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+      const store = tx.objectStore(IDB_STORE_NAME);
+      store.put(entry);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onabort = tx.onerror = () => {
+        const err = tx.error || new Error("idb save failed");
+        db.close();
+        reject(err);
+      };
+    }).catch((e) => {
+      console.warn("saveEntryToIDB failed", e);
+      return false;
+    });
+  }
+
+  async function getAllFromIDB() {
+    if (!HAS_INDEXED_DB) return [];
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE_NAME, "readonly");
+      const store = tx.objectStore(IDB_STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        resolve(req.result || []);
+      };
+      req.onerror = () => {
+        reject(req.error || new Error("idb getAll failed"));
+      };
+      tx.oncomplete = () => db.close();
+      tx.onabort = tx.onerror = () => {
+        db.close();
+      };
+    }).catch((e) => {
+      console.warn("getAllFromIDB failed", e);
+      return [];
+    });
+  }
+
+  async function deleteEntryFromIDB(id) {
+    if (!HAS_INDEXED_DB) return false;
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+      const store = tx.objectStore(IDB_STORE_NAME);
+      store.delete(id);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onabort = tx.onerror = () => {
+        const err = tx.error || new Error("idb delete failed");
+        db.close();
+        reject(err);
+      };
+    }).catch((e) => {
+      console.warn("deleteEntryFromIDB failed", e);
+      return false;
+    });
+  }
+
+  function shrinkEntryForLocal(entry) {
+    if (!entry) return entry;
+    const { photos, photo, ...rest } = entry;
+    return { ...rest, photo: "", photos: [] };
+  }
+
+  if (typeof window !== "undefined") {
+    if (!window.getAllFromIDB) window.getAllFromIDB = getAllFromIDB;
+    if (!window.deleteEntryFromIDB) window.deleteEntryFromIDB = deleteEntryFromIDB;
+    if (!window.saveEntryToIDB) window.saveEntryToIDB = saveEntryToIDB;
+  }
+
   // 이미지 축소(JPEG) → dataURL
   async function downscaleToDataURL(file, maxSide = 1280, quality = 0.8) {
     const img = await new Promise((res, rej) => {
@@ -108,7 +211,22 @@
     photoItems: [
       /* {dataURL, name, shotAt} */
     ],
+    uploadToken: 0,
   };
+
+  async function hydrateEntriesFromIDB() {
+    try {
+      const idbEntries = await getAllFromIDB();
+      if (!idbEntries || !idbEntries.length) return;
+      const merged = new Map();
+      state.entries.forEach((e) => merged.set(e.id, e));
+      idbEntries.forEach((e) => merged.set(e.id, e));
+      state.entries = Array.from(merged.values());
+      renderAll();
+    } catch (e) {
+      console.warn("hydrateEntriesFromIDB failed", e);
+    }
+  }
 
   // ================== 분류/라벨 ==================
   function classifyCategory(fileNames) {
@@ -122,7 +240,7 @@
   }
 
   function normalizeTimeLabel(idx, total) {
-    if (total <= 1) return "오후";
+    if (total <= 1) return "불명";
     const ratio = idx / (total - 1);
     if (ratio < 0.25) return "오전";
     if (ratio < 0.5) return "정오";
@@ -151,10 +269,12 @@
   }
 
   // ================== API ==================
+  const AUTO_API_TIMEOUT_MS = 90000;
+
   async function callAutoDiaryAPI(images, photosSummary, tone, imagesMeta) {
     if (!API_URL) return null;
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort("timeout"), 45000);
+    const t = setTimeout(() => ctrl.abort("timeout"), AUTO_API_TIMEOUT_MS);
 
     // 변경: imagesMeta 포함
     const payload = { tone, images, photosSummary, imagesMeta };
@@ -448,10 +568,13 @@
         x.className = "x";
         x.textContent = "×";
         x.onclick = () => {
+          state.photoItems.splice(i, 1);
           state.tempPhotos.splice(i, 1);
           if (state.tempNames) state.tempNames.splice(i, 1);
           if (state.repIndex >= state.tempPhotos.length)
             state.repIndex = Math.max(0, state.tempPhotos.length - 1);
+          state.viewIndex = Math.min(state.viewIndex, state.tempPhotos.length - 1);
+          if (state.viewIndex < 0) state.viewIndex = 0;
           renderGallery();
           updatePreviewFromView();
         };
@@ -501,6 +624,7 @@
     state.repIndex = 0;
     state.viewIndex = 0;
     state.photoItems = []; // 추가: 촬영시각 포함 구조 초기화
+    state.uploadToken += 1;
     const img = $("#preview");
     const ph = $("#previewWrap .ph");
     const pw = $("#previewWrap");
@@ -607,6 +731,7 @@
     const fileInput = $("#file");
     if (fileInput) {
       fileInput.addEventListener("change", async (ev) => {
+        const token = ++state.uploadToken;
         const files = Array.from(ev.target.files || []);
         if (!files.length) return;
         const remain = MAX_UPLOAD - state.photoItems.length;
@@ -632,6 +757,9 @@
           // 축소
           try {
             const durl = await downscaleToDataURL(f, 1280, 0.8);
+            if (token !== state.uploadToken) {
+              continue;
+            }
             state.photoItems.push({
               dataURL: durl,
               name: f.name || "",
@@ -640,6 +768,10 @@
           } catch (e) {
             console.warn("resize fail", e);
           }
+        }
+
+        if (token !== state.uploadToken) {
+          return;
         }
 
         // 촬영시각 오름차순 정렬 → 기존 갤러리 상태에 반영
@@ -704,7 +836,7 @@
     // 저장
     const saveBtn = $("#saveBtn");
     if (saveBtn) {
-      saveBtn.addEventListener("click", (ev) => {
+      saveBtn.addEventListener("click", async (ev) => {
         if (ev) {
           ev.preventDefault();
           ev.stopPropagation();
@@ -740,13 +872,20 @@
         if (idx >= 0) state.entries[idx] = entry;
         else state.entries.push(entry);
 
-        const stored = saveLS("entries", state.entries);
+        const metaEntries = state.entries.map(shrinkEntryForLocal);
+        const stored = saveLS("entries", metaEntries);
         if (!stored) {
           state.entries = previousEntries;
           alert(
-            "저장 공간이 가득 찼습니다. 다른 기록을 삭제하거나 사진 수/용량을 줄인 뒤 다시 시도해 주세요."
+            "로컬 저장 공간이 부족해 저장에 실패했습니다. 다른 기록을 정리한 뒤 다시 시도해 주세요."
           );
           return;
+        }
+
+        try {
+          await saveEntryToIDB(entry);
+        } catch (e) {
+          console.warn("saveBtn -> saveEntryToIDB error", e);
         }
 
         state.cursor = entry.id;
@@ -765,13 +904,22 @@
     // 삭제
     const delBtn = $("#delBtn");
     if (delBtn) {
-      delBtn.addEventListener("click", () => {
+      delBtn.addEventListener("click", async () => {
         if (!state.cursor) {
           resetComposer();
           return;
         }
-        state.entries = state.entries.filter((e) => e.id !== state.cursor);
-        saveLS("entries", state.entries);
+        const targetId = state.cursor;
+        state.entries = state.entries.filter((e) => e.id !== targetId);
+        saveLS(
+          "entries",
+          state.entries.map(shrinkEntryForLocal)
+        );
+        try {
+          await deleteEntryFromIDB(targetId);
+        } catch (e) {
+          console.warn("deleteEntryFromIDB error", e);
+        }
         resetComposer();
         renderAll();
       });
@@ -797,6 +945,8 @@
           updatePreviewFromView();
         }
       });
+
+    hydrateEntriesFromIDB();
   });
 })();
 

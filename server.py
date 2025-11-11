@@ -98,6 +98,48 @@ def soften_report_tone(text: str) -> str:
     t = re.sub(r"(있었다\.)\s+(있었다\.)", r"\1 ", t)
     return t.strip()
 
+# ----------------교체 유틸 함수 추가----------------
+def replace_proper_nouns_if_no_visible_text(analysis: dict, draft: str) -> str:
+    """
+    visible_text나 명확한 증거가 없을 경우,
+    초안 내 음식/지명 고유명사를 일반어로 교체한다.
+    """
+    if not analysis or not draft:
+        return draft
+
+    frames = analysis.get("frames") or []
+    any_visible_text = any(f.get("visible_text", "").strip() for f in frames)
+    if any_visible_text:
+        return draft  # 실제 글자가 보였다면 그대로 둠
+
+    # 교체 사전 (필요시 확장 가능)
+    replace_map = {
+        r"스타벅스": "카페",
+        r"이디야": "카페",
+        r"투썸": "카페",
+        r"던킨": "카페",
+        r"파리바게뜨": "빵집",
+        r"비빔밥": "요리",
+        r"불고기": "요리",
+        r"김치찌개": "찌개",
+        r"된장찌개": "찌개",
+        r"라멘": "면요리",
+        r"파스타": "면요리",
+        r"피자": "요리",
+        r"맥도날드": "패스트푸드점",
+        r"롯데리아": "패스트푸드점",
+    }
+
+    text = draft
+    for pat, rep in replace_map.items():
+        text = re.sub(pat, rep, text, flags=re.I)
+
+    return text
+# ---- 보고서형/나열/오타/시제/시점/리듬/감정 교정 ----
+GENERIC_LIST_RE = re.compile(r"(국|찌개|탕|면|밥|반찬|김치)(?:[ ,과와및]+(국|찌개|탕|면|밥|반찬|김치))+", re.U)
+def simplify_food_enumeration(text: str) -> str:
+    if not text: return text
+    return GENERIC_LIST_RE.sub("반찬 몇 가지", text)
 # ---------------- 카테고리 ----------------
 FOOD_RE = re.compile(r"(음식|식당|카페|요리|coffee|cafe|cake|bread|meal|lunch|dinner|brunch|dessert|커피|빵|케이크|디저트)", re.I)
 def decide_category_from_lines(lines: list[str]) -> str:
@@ -108,8 +150,10 @@ def decide_category_from_lines(lines: list[str]) -> str:
 # ---------------- 1) 분석: 이미지 → 구조화 JSON ----------------
 def analyze_images(images: list[str]) -> dict | None:
     """
-    사진에서 확인 가능한 사실만 수집.
-    모델이 사진 순서/시간단서/실내외/장소 단서를 추출.
+    당신은 사진을 세밀하게 분석하는 도우미입니다.
+    각 사진에서 보이는 내용(음식, 배경, 사람 등)을 요약하고, 
+    텍스트(메뉴판, 상표, 라벨 등)가 실제로 **보이는지 여부와 내용**을 명시적으로 기술하세요.
+    그리고 각 사진에 대해 실내/실외, 시간단서, 장소단서, 흐름단서를 추출하세요.
     """
     if not images:
         return None
@@ -119,8 +163,14 @@ def analyze_images(images: list[str]) -> dict | None:
         "아래 이미지를 **추측 없이** 관찰해 JSON으로 요약하세요.\n"
         "- 메타표현(사진/이미지/촬영 등) 금지, 파일명/날짜 언급 금지\n"
         "- 성별·인원수 추정 금지, 불확실하면 생략\n"
-        "- 각 사진에 대해: 핵심 한줄(summary), 보이는 요소(elements), 실내/실외(indoor_outdoor), 시간단서(time_hint: 오전/오후/저녁/밤 등), 장소단서(place_hint: 보이면 한 단어), 흐름단서(flow: 이동/머무름 등)\n"
+        "- 각 사진에 대해: 핵심 한줄(summary), 보이는 요소(elements), 실내/실외(indoor_outdoor), 시간단서(time_hint: 오전/오후/저녁/밤 등), 장소단서(place_hint: 보이면 한 단어), 공간관계(space_relations: 배경·거리감·시선방향 등 간략히), 흐름단서(flow: 이동/머무름 등)\n"
+	    "- 음식·장소 **고유명사(메뉴/지명)**는 **보일 때만** 기록.\n"
+        "- 야외/가정/카페 추측 금지. 공원/벤치/바람/하늘/창문/카페/커피 같은 단어는 보이는 경우만 허용.\n"
+        "- 한식 상차림이나 반찬류는 '반찬'으로, 명확한 명칭이 보이면 해당 단어 사용.\n"
         "- 가능한 경우, 사진 내부의 표시(간판·메뉴판 등)를 **있다/없다** 수준으로만 언급\n\n"
+        "- 메뉴/요리 이름은 visible_text 에 있을 때만 기록.\n"
+        "  food:{has_food,has_drink,serving_style(단품/코스/사이드 등), cuisine_guess_low_conf(저신뢰 추측)},\n"
+        "- visible_text: 사진 안에 실제로 보이는 글자(간판·라벨·메뉴판 등). 없으면 빈 문자열.\n\n"
         "JSON 형식:\n"
         "{\n"
         "  \"frames\": [\n"
@@ -128,6 +178,8 @@ def analyze_images(images: list[str]) -> dict | None:
         "      \"indoor_outdoor\": \"indoor|outdoor|unknown\",\n"
         "      \"time_hint\": \"오전|정오|오후|저녁|밤|불명\",\n"
         "      \"place_hint\": \"보이면 한 단어, 없으면 빈 문자열\",\n"
+        "      \"space_relations\": \"보이는 배경·거리감·시선방향 등 간략히\",\n"
+        "      \"visible_text\": \"보이는 텍스트, 없으면 빈 문자열\",\n"
         "      \"flow\": \"이동|머무름|불명\"}\n"
         "  ],\n"
         "  \"global\": {\n"
@@ -207,26 +259,47 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
     )
     user = f"""
 아래 관찰 단서를 바탕으로 20~30대 자연체 일기를 **한 단락**으로 작성하세요.
+보고서가 아닌 회상처럼 써야 합니다.
 
 {header}
 [관찰]
 {os.linesep.join(bullets) if bullets else "- 단서 적음"}
 
+[경험 중심]
+- 단순히 장면을 묘사하지 말고, 그 **순간의 경험과 행동**을 중심으로 써주세요.
+- '나는' 같은 주어를 직접 쓰지 않아도, 주체의 **행동**이 자연스럽게 드러나야 합니다.
+- 시각적 묘사만 나열하지 말고, **후각·식감·촉각·온도감·질감** 같은 보조 감각을 섞으세요.
+- 그러나 주요 감각(청각, 미각) 한 두개만 남기고 나머지는 암시로 처리해야 합니다.
+- 감정이 드러날 때는 **왜 그런 감정이 생겼는지** 구체적인 이유를 함께 표현하세요.
+- 그리고 감정을 결과로 두지 말고, 행위나 침묵으로 암시를 하도록 합니다.
+- 문장 리듬이 단조로워지지 않도록 **짧은 문장과 묘사 문장**을 교차해 변주하세요.
+- 한 두 문장은 짧게 끊고, 중간에 호흡을 만들어 줘야 합니다.
+
+[사실 일치]
+- 음식·장소 **고유명사**는 보일 때만 사용.
+- **보이지 않으면 절대 추측하거나 대체 이름을 만들지 말 것.** 
+- 한식 반찬류는 '반찬', 단품 요리는 '요리' 정도로만 표현.
+- 사람이 보이지 않으면 군중 묘사 금지. 소리·냄새 생성 금지.
+
 [작성 규칙 — 20~30대 자연체]
-- 말하듯 써라. 보고/하고/느낀 것을 짧고 긴 문장 섞어 표현.
+- 첫 문장은 고정되어있지 않다. 맥락과 감각을 순서로 배치한다.
+- 모든 문장은 **과거형**으로 통일. 중요함. 
+- **관찰보다 체험을 우선** 설명. 당시의 경험을 회상하는 1인칭 시점을 사용한다. 그러나 '나는'과 같은 주어를 드러내는 표현은 금지.
+- 말하듯 써라. 보고/하고/느낀 것을 직접 행위 중심 문장으로 바꿔가며 짧고 긴 문장 섞어 표현.
 - '~있었다'만 반복하지 말고, '남아 있었다/눈에 들어왔다/한참 봤다/꺼냈다/잠깐 고민했다'처럼 변주하라.
-- 관찰 기반 + 작은 행동 + 가벼운 감각(빛·냄새·촉감)으로 암시.
-- 감정은 직접 말하기보다 '조금/잠깐/괜히' 같은 부사로 은은히.
+- 감정은 직접 말하기보다 '조금/잠깐/괜히' 같은 부사로 은은히. 
+- 음식 사진의 감각은 구체적 감각으로 암시. 그리고 감정은 있으나 원인과 연결되어야 한다.
 - 메타표현(사진/이미지/촬영 등) 금지, 파일명/날짜 금지.
 - 성별·인원수 추정 금지, 관계/거리감은 간접적으로.
+- 너무 길어지지 않게 문장의 리듬을 다양하게 사용해야 함. 짧은 문장과 묘사 중심 문장을 교차시켜야 함. 감정의 고저가 느껴져야 한다.
 - {length_rule} 준수.
 - 톤: {tone or "중립"} (과장 금지, 담백하게).
 """
 
     r = throttled_chat_completion(
         model=MODEL_TEXT,
-        temperature=0.35,
-        top_p=0.9,
+        temperature=0.15,
+        top_p=0.8,
         max_tokens=600,
         messages=[
             {"role":"system","content": sys},
@@ -235,6 +308,7 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
     )
     draft = (r.choices[0].message.content or "").strip()
     draft = clean_inline(draft)
+    draft = replace_proper_nouns_if_no_visible_text(analysis, draft)
     return draft
 
 # ---------------- 3) 보정: 리듬/어조/반복 정리 ----------------
@@ -251,11 +325,19 @@ def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: st
 {draft}
 
 [보정 지침]
-- 설명문 느낌을 줄이고, 회상하듯 자연스러운 리듬으로.
+- **1인칭 체험체 + 과거형** 유지. 관찰 표현(눈에 들어왔다/보였다)은 행동 표현(잠시 바라봤다/앞에 있었다)로 정리.
+- 직접 체험 시점으로 전환하라. "나는"이나 "주어"를 직접적으로 쓰지 않고도, 주체의 **행위**가 자연스럽게 드러나게 표현해주세요.
+- 장면 간의 **맥락 연결어**(그때 / 잠시 후 / 그러다 / 한참 뒤 등)를 자연스럽게 추가해 시간 흐름을 암시하라.
+- 감정은 한순간이 아니라 **시간 속에서 변화**하는 느낌으로 조정하라.
+- 사람이 보이지 않으면 군중 묘사 금지. 소리·냄새 생성 금지.
+- 감정을 구체 감각으로 자연화. 리듬 단조는 문장 길이 변주로 보정.
+- 감정 변화의 원인이 있어야 한다.
+- 사실과 다른 고유명사(요리명·지명) 금지. 보이지 않으면 일반어 유지.
 - 너무 딱딱한 명사구 연쇄, '일상적인 풍경' 같은 추상 표현은 구체로 치환하거나 제거.
 - 문장 길이와 어미를 다양화. '~있었다' 반복을 줄이고 필요한 곳만 남김.
+- 감정의 포화가 되지 않도록 한 요소만 남기고 나머지는 암시로 처리해라.
 - 과장/비유/메타표현 금지 유지. 한 단락 유지.
-- 문장 수: {length_rule}. 톤: {tone or "중립"}.
+- **문장 수: {length_rule}. 톤: {tone or "중립"}**.중요.
 
 출력은 최종 문단만.
 """
@@ -283,7 +365,9 @@ def generate_from_lines(lines: list[str], tone: str) -> str:
 
 [작성 규칙 — 20~30대 자연체]
 - 말하듯 써라. 짧고 긴 문장 섞기.
-- '~있었다' 반복 줄이기. 작은 행동과 감각 단서를 섞기.
+- 시제는 모두 과거형으로 통일.
+- 말하듯. 행동+감각 중심. 단순 '좋았다' 대신 조명/온도/식감 등으로 감정 암시.
+- '~있었다' 반복 줄이기. 작은 행동과 감각 단서를 섞기.  
 - 메타표현·날짜·파일명 금지. 성별/인원수 추정 금지.
 - 문장 수: {"5~7문장" if len(lines)>1 else "3~4문장"}.
 - 톤: {tone or "중립"}.
