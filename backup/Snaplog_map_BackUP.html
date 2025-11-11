@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="ko">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <title>스냅로그 | Snaplog</title>
+  <link rel="stylesheet" href="snaplog.css">
+  <!-- 추가: EXIF 파서 -->
+  <script src="https://unpkg.com/exifr/dist/exifr.min.js"></script>
+  <!-- Leaflet + MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+ </head>
+ <body>
+  <div class="bg">
+   <!-- App -->
+   <div class="panel" id="app" style="display:block">
+    <div class="topbar">
+     <div class="brand">스냅로그</div>
+     <span class="badge" id="statAll">전체 0</span>
+     <span class="badge" id="statMonth">이번 달 0</span>
+     <span class="badge" id="statPhotos">사진 0</span>
+     <div class="spacer"></div>
+     <div class="toggle" title="다크모드">
+      <span aria-hidden="true" class="label">다크모드</span>
+      <label class="switch">
+       <input id="darkToggleApp" type="checkbox"/>
+       <span class="slider"></span>
+      </label>
+     </div>
+    </div>
+    <div class="layout" id="layout" style="display:grid">
+     <aside class="card">
+      <div class="section-title">달력</div>
+      <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
+       <button class="btn ghost" id="prevM">◀︎</button>
+       <div id="ym"></div>
+       <button class="btn ghost" id="nextM">▶︎</button>
+      </div>
+      <div class="calendar" id="calendar"></div>
+      <hr style="opacity:.6; margin:12px 0"/>
+      <div class="section-title">최근 기록</div>
+      <div class="list small" id="recent"></div>
+     </aside>
+
+     <section class="card">
+      <div class="section-title">나의 기록</div>
+      <!-- 전체지도 container -->
+      <div id="allMapContainer" class="tab-content" style="display:block; margin-top:12px;">
+        <!-- 지도 필터 컨트롤 -->
+        <div style="background:#f8f9fa; padding:16px; border-radius:12px; margin-bottom:12px;">
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <label style="font-size:14px; font-weight:500;">기간:</label>
+              <input type="date" id="mapStartDate" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+              <span style="color:#999;">~</span>
+              <input type="date" id="mapEndDate" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <label style="font-size:14px; font-weight:500;">해시태그:</label>
+              <input type="text" id="mapHashtag" placeholder="#여행" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; width:120px;">
+            </div>
+            <button class="btn" id="mapFilterBtn" style="padding:6px 16px; font-size:13px;">필터 적용</button>
+            <button class="btn ghost" id="mapResetBtn" style="padding:6px 16px; font-size:13px;">초기화</button>
+          </div>
+          <div id="mapHashtagList" style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+        </div>
+        <div id="allMap" style="height:500px; border-radius:12px;"></div>
+      </div>
+      <div class="tabs">
+        <a href="Snaplog_test4+map.html" 
+        class="tab" data-tab="diary" style="text-decoration: none;">
+          일기
+        </a>
+       <div class="tab active" data-tab="map">지도</div>
+       <a href="Snaplog_allDiaries.html" 
+       class="tab" data-tab="all-diary" style="text-decoration: none;">전체일기</a>
+      </div>
+     </section>
+    </div>
+   </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- <script src="snaplog2.js"></script> -->
+  <script src="snaplog4.js"></script>
+  <script src="snaplog_map4.js"></script>
+</body>
+</html>

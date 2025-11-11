@@ -84,7 +84,10 @@ hr{ border:none; border-top:1px solid var(--line); }
 }
 
 .daily_button{ width:100%; height: 50px; font-size:18px; border-radius:18px; }
-@media (max-width:640px){  .daily_button{ height:50px; font-size:17px;  .ghost{ width:90%; max-width:360px; } } }
+@media (max-width:640px){
+  .daily_button{ height:50px; font-size:17px; }
+  .ghost{ width:90%; max-width:360px; }
+}
 
 /* gallery */
 .gallery{ display:flex; gap:10px; align-items:center; overflow-x:auto; overflow-y:hidden; padding:8px 2px; margin-top:10px; max-width:100%; box-sizing:border-box; -webkit-overflow-scrolling:touch }
@@ -164,4 +167,205 @@ html[data-theme="dark"] .calendar .cell.saved{
 }
 @keyframes snaplog-spin{
   to{ transform:rotate(360deg); }
+}
+/* 기존 CSS에 추가할 스타일 */
+/* 캘린더 셀 - 선택된 날짜 */
+.calendar .cell.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* 다크모드에서 선택된 날짜 */
+[data-theme="dark"] .calendar .cell.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+}
+
+/* 선택된 날짜에 마우스 오버 */
+.calendar .cell.selected:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+/* 선택된 날짜이면서 오늘인 경우 */
+.calendar .cell.selected.today {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #fbbf24;
+}
+
+/* 선택된 날짜이면서 저장된 경우 */
+.calendar .cell.selected.saved::after {
+  background: white;
+}
+
+/* 선택된 날짜 표시 텍스트 스타일 */
+#selectedDate {
+  color: #667eea;
+  font-size: 0.9em;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+[data-theme="dark"] #selectedDate {
+  color: #a78bfa;
+}
+
+
+/* 지도 필터 컨트롤 */
+.map-filter {
+  background: var(--card);
+  padding: 16px 3%;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+}
+
+.filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: fit-content;
+}
+
+.filter-input {
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.filter-input::placeholder {
+  color: var(--muted);
+}
+
+.filter-divider {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.hashtag-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.hashtag-chip {
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.hashtag-chip:hover {
+  transform: scale(1.05);
+  background: var(--accent-2);
+}
+
+@media (max-width: 900px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filter-group {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .filter-input {
+    flex: 1;
+  }
+
+  .filter-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* 다크모드 지도 필터 컨트롤 배경 어둡게 */
+html[data-theme="dark"] .map-filter {
+  background: #1c1f2a; /* 기존 var(--card)보다 더 어두운 색 */
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+
+/* 라벨 글자색은 밝게 유지 */
+html[data-theme="dark"] .filter-label {
+  color: #f2f3f5; 
+}
+
+/* 입력창 배경 */
+html[data-theme="dark"] .filter-input {
+  background: #2a2e3d; /* 더 어두운 입력창 */
+  color: #f2f3f5;
+  border: 1px solid var(--line-strong);
+}
+
+/* 입력창 placeholder 색상 */
+html[data-theme="dark"] .filter-input::placeholder {
+  color: #bfc6d2; /* 밝은 회색 */
+}
+
+/* 해시태그 칩 */
+html[data-theme="dark"] .hashtag-chip {
+  background: #3a3f5a; /* 진한 배경 */
+  color: #f2f3f5;
+}
+
+html[data-theme="dark"] .hashtag-chip:hover {
+  background: #5a60a0; /* hover 시 포인트 컬러 */
+  color: #fff;
+}
+
+
+@media (max-width: 900px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-buttons {
+    justify-content: flex-start;
+  }
+  .filter-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .filter-input {
+    flex: 1;
+  }
 }
