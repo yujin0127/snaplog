@@ -592,7 +592,6 @@
           });
           }
 
-  
       try {
         renderCalendar();
       } catch (e) {

@@ -593,15 +593,44 @@
           }
   
       // 인트로 → 앱 전환
+    //   const intro = $("#intro");
+    //   const app = $("#app");
+    //   const startBtn = $("#startBtn");
+    //   if (intro) intro.style.display = "block";
+    //   if (app) app.style.display = "none";
+    //   if (startBtn) {
+    //     startBtn.addEventListener("click", () => {
+    //       try {
+    //         resetComposer();
+    //         if (intro) intro.style.display = "none";
+    //         if (app) app.style.display = "block";
+    //         renderAll();
+    //       } catch (e) {
+    //         console.warn("startBtn error", e);
+    //       }
+    //     });
+    //   }
+
+      // 인트로 → 앱 전환 초기 한 번만 뜨게
       const intro = $("#intro");
       const app = $("#app");
       const startBtn = $("#startBtn");
-      if (intro) intro.style.display = "block";
-      if (app) app.style.display = "none";
+      const hasVisited = loadLS("hasVisited", false);
+      
+      if (hasVisited) {
+        if (intro) intro.style.display = "none";
+        if (app) app.style.display = "block";
+        renderAll();
+      } else {
+        if (intro) intro.style.display = "block";
+        if (app) app.style.display = "none";
+      }
+      
       if (startBtn) {
         startBtn.addEventListener("click", () => {
           try {
             resetComposer();
+            saveLS("hasVisited", true);
             if (intro) intro.style.display = "none";
             if (app) app.style.display = "block";
             renderAll();
