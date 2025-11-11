@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>스냅로그 | 전체 일기 목록</title>
+<<<<<<< HEAD
   <link rel="stylesheet" href="mainpage.css">
   <style>
     /* 추가적인 레이아웃/스타일 보완 (mainpage.css와 충돌 없게 최소한으로) */
@@ -14,6 +15,16 @@
     .filter-bar input[type="date"], .filter-bar input[type="text"]{
       padding:10px; border-radius:10px; border:1px solid var(--line-strong); background:var(--card);
       outline:none; min-width:160px;
+=======
+  <link rel="stylesheet" href="snaplog.css">
+  <style>
+    .layout { display:grid; grid-template-columns: 300px 1fr; gap:16px; padding:16px; }
+    .list-area { display:flex; flex-direction:column; gap:12px; }
+    .filter-bar { display:flex; gap:8px; align-items:center; }
+    .filter-bar select, .filter-bar input[type="text"]{
+      padding:10px; border-radius:10px; border:1px solid var(--line-strong); background:var(--card);
+      outline:none; min-width:80px;
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
     }
     .filter-bar .btn { height:48px; padding:10px 14px; border-radius:12px; }
     .results { display:flex; flex-direction:column; gap:10px; max-height:56vh; overflow:auto; padding-right:6px; }
@@ -24,19 +35,33 @@
     .meta .title { font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .meta .date { font-size:12px; color:var(--muted); margin-top:4px; }
     .meta .excerpt { font-size:13px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+<<<<<<< HEAD
     .pager { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:8px; }
     .pager .btn { padding:8px 12px; height:40px; border-radius:10px; }
     /* 모달 (기존 스타일 유지) */
     .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.25); align-items:center; justify-content:center; padding:20px; z-index:60; }
     .modal .card { width:min(900px, 96vw); max-height:80vh; overflow:auto; }
     /* 반응형 보완 */
+=======
+    .card-footer { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+    .pager { display:flex; gap:8px; align-items:center; justify-content:center; }
+    .pager .btn { padding:8px 12px; height:40px; border-radius:10px; }
+    .tabs { display:flex; gap:6px; justify-content:center; }
+    .tabs .tab { flex:1; text-align:center; padding:8px 0; border-radius:10px; cursor:pointer; }
+    .tabs .active { background:var(--line-strong); color:var(--card); font-weight:600; }
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.25); align-items:center; justify-content:center; padding:20px; z-index:60; }
+    .modal .card { width:min(900px, 96vw); max-height:80vh; overflow:auto; }
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
     @media (max-width:900px){ .layout{ grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="bg">
     <div class="panel" id="appPanel" style="display:block;">
+<<<<<<< HEAD
       <!-- 상단 -->
+=======
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
       <div class="topbar">
         <div class="brand">스냅로그</div>
         <span class="badge" id="statAll">전체 0</span>
@@ -53,9 +78,13 @@
         <a class="btn ghost" href="Snaplog_test3.html" style="margin-left:12px;">작성하러 가기</a>
       </div>
 
+<<<<<<< HEAD
       <!-- 레이아웃: 왼쪽 달력 / 오른쪽 목록 -->
       <div class="layout" id="layout">
         <!-- LEFT: 달력 + 최근 기록 (기존 Snaplog 구조 유지) -->
+=======
+      <div class="layout" id="layout">
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
         <aside class="card" style="padding-bottom:12px;">
           <div class="section-title">달력</div>
           <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
@@ -70,17 +99,27 @@
           <div class="list small" id="recent"></div>
         </aside>
 
+<<<<<<< HEAD
         <!-- RIGHT: 필터 + 전체목록 (오늘의 기록 영역 대체) -->
         <section class="card">
           <div style="display:flex; align-items:center; justify-content:space-between;">
             <div class="section-title">전체 일기 목록</div>
             <div style="display:flex; gap:8px; align-items:center;">
               <input id="filterDate" type="date" style="height:40px; border-radius:10px; padding:8px;" />
+=======
+        <section class="card" style="display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div class="section-title">전체 일기 목록</div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <select id="filterYear" style="height:40px; border-radius:10px; padding:8px;"></select>
+              <select id="filterMonth" style="height:40px; border-radius:10px; padding:8px;"></select>
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
               <input id="searchInput" type="text" placeholder="제목/내용 검색" style="height:40px; border-radius:10px; padding:8px;" />
               <button id="resetBtn" class="btn ghost">초기화</button>
             </div>
           </div>
 
+<<<<<<< HEAD
           <div style="margin-top:12px;">
             <div class="results" id="results"></div>
             <div class="pager" id="pager">
@@ -96,12 +135,32 @@
             <div class="tab">지도</div>
             <div class="tab active">전체일기</div>
           </div>
+=======
+          <div style="margin-top:12px; flex:1; display:flex; flex-direction:column;">
+            <div class="results" id="results" style="flex:1; overflow:auto;"></div>
+            <div class="card-footer">
+              <div class="pager" id="pager">
+                <button id="prevPage" class="btn ghost">이전</button>
+                <div id="pageInfo" class="small" style="align-self:center;"></div>
+                <button id="nextPage" class="btn ghost">다음</button>
+              </div>
+              <div class="tabs">
+                <div class="tab" id="tapDiary" onclick="location.href='Snaplog_test4.html'">일기</div>
+                <div class="tab" id="tapMap">지도</div>
+                <div class="tab active" id="tapList">전체일기</div>
+              </div>
+            </div>
+          </div>
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
         </section>
       </div>
     </div>
   </div>
 
+<<<<<<< HEAD
   <!-- 모달: 상세보기 -->
+=======
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
   <div id="modal" class="modal">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);">
@@ -124,11 +183,15 @@
 (function(){
   "use strict";
 
+<<<<<<< HEAD
   // ======= 유틸 (mainpage와 동일한 load/save 함수) =======
+=======
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
   function saveLS(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn("save fail",k,e); } }
   function loadLS(k,f){ try{ const v=localStorage.getItem(k); return v? JSON.parse(v): f; }catch(e){ return f; } }
   function parseYMD(s){ const [y,m,d] = (s||"").split("-").map(x=>parseInt(x,10)); return {y,m,d}; }
 
+<<<<<<< HEAD
   // ======= 상태 =======
   const state = {
     entries: loadLS('entries', []), // 기존 Snaplog가 사용하던 키: 'entries'
@@ -143,12 +206,25 @@
   };
 
   // ======= 테마 적용 =======
+=======
+  const state = {
+    entries: loadLS('entries', []),
+    theme: loadLS('theme','light'),
+    cal: new Date(),
+    filtered: [],
+    page: 1,
+    perPage: 15,
+    activeKeyword: ''
+  };
+
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
   function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); saveLS('theme', t); }
   applyTheme(state.theme);
 
   const darkToggleApp = document.getElementById('darkToggleApp');
   if(darkToggleApp){
     darkToggleApp.checked = state.theme==='dark';
+<<<<<<< HEAD
     darkToggleApp.addEventListener('change', ()=>{
       state.theme = darkToggleApp.checked?'dark':'light';
       applyTheme(state.theme);
@@ -230,6 +306,71 @@
   function openModal(e){
     const m = $('#modal'); if(!m) return;
     m.style.display='flex';
+=======
+    darkToggleApp.addEventListener('change', ()=>{ state.theme = darkToggleApp.checked?'dark':'light'; applyTheme(state.theme); });
+  }
+
+  function $(s,p=document){ return p.querySelector(s); }
+
+  function renderStats(){
+    const all = state.entries.length;
+    const monthKey = (new Date().getFullYear()) + "-" + String(new Date().getMonth()+1).padStart(2,'0');
+    const month = state.entries.filter(e=> (e.date||"").startsWith(monthKey)).length;
+    const photos = state.entries.filter(e=> Array.isArray(e.photos) ? e.photos.length : (e.photo?1:0)).length;
+    $('#statAll').textContent = `전체 ${all}`;
+    $('#statMonth').textContent = `이번 달 ${month}`;
+    $('#statPhotos').textContent = `사진 ${photos}`;
+  }
+
+  function renderCalendar(){
+    const cal = $('#calendar'); if(!cal) return;
+    cal.innerHTML='';
+    const ym = $('#ym');
+    const cur = new Date(state.cal.getFullYear(), state.cal.getMonth(), 1);
+    ym.textContent = `${cur.getFullYear()}년 ${String(cur.getMonth()+1).padStart(2,'0')}월`;
+
+    const daysHeader = ['일','월','화','수','목','금','토'];
+    daysHeader.forEach(d=>{ const h=document.createElement('div'); h.className='cell head'; h.textContent=d; cal.appendChild(h); });
+
+    const firstDay = new Date(cur.getFullYear(), cur.getMonth(), 1).getDay();
+    const lastDate = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+    for(let i=0;i<firstDay;i++){ const e=document.createElement('div'); e.className='cell head'; e.style.visibility='hidden'; cal.appendChild(e); }
+
+    const saved = new Set(state.entries.filter(e=>{ if(!e.date) return false; const {y,m} = parseYMD(e.date); return y===cur.getFullYear() && m===cur.getMonth()+1; }).map(e=> parseYMD(e.date).d));
+
+    const today=new Date();
+    for(let d=1; d<=lastDate; d++){
+      const cell=document.createElement('div'); cell.className='cell'; cell.textContent = d;
+      if(saved.has(d)) cell.classList.add('saved');
+      if(d===today.getDate() && cur.getMonth()===today.getMonth() && cur.getFullYear()===today.getFullYear()) cell.classList.add('today');
+      cell.onclick=()=>{
+        state.cal = new Date(cur.getFullYear(), cur.getMonth(), d);
+        $('#filterYear').value = cur.getFullYear();
+        $('#filterMonth').value = cur.getMonth()+1;
+        state.page=1;
+        applyFiltersAndRender();
+      };
+      cal.appendChild(cell);
+    }
+  }
+
+  function renderRecent(){
+    const box = $('#recent'); if(!box) return;
+    box.innerHTML='';
+    const arr = state.entries.slice().reverse().slice(0,50);
+    if(arr.length===0){ box.innerHTML = '<div class="small">최근 기록이 없습니다.</div>'; return; }
+    arr.forEach(e=>{
+      const it=document.createElement('div'); it.className='item';
+      const left=document.createElement('div'); left.innerHTML = `<div><strong>${e.title || '제목 없음'}</strong></div><div class="small">${e.date || ''}</div>`;
+      const right=document.createElement('button'); right.className='btn ghost'; right.textContent='보기';
+      right.onclick=()=>{ openModal(e); };
+      it.append(left,right); box.appendChild(it);
+    });
+  }
+
+  function openModal(e){
+    const m = $('#modal'); if(!m) return; m.style.display='flex';
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
     $('#m-title').textContent = e.title || '제목 없음';
     $('#m-date').textContent = e.date || '';
     $('#m-body').textContent = e.body || e.text || '';
@@ -243,7 +384,10 @@
   }
   $('#closeModal')?.addEventListener('click', ()=>{ $('#modal').style.display='none'; });
 
+<<<<<<< HEAD
   // ======= 결과 목록 렌더 (오른쪽) =======
+=======
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
   function excerpt(s, n=180){ if(!s) return ''; return s.length>n? s.slice(0,n-1)+'…': s; }
 
   function renderResults(){
@@ -284,12 +428,16 @@
       });
     }
 
+<<<<<<< HEAD
     // 페이저 업데이트
+=======
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
     $('#pageInfo').textContent = `${state.page} / ${totalPages}`;
     $('#prevPage').disabled = state.page <= 1;
     $('#nextPage').disabled = state.page >= totalPages;
   }
 
+<<<<<<< HEAD
   // ======= 필터 적용 로직 =======
   function applyFiltersAndRender(){
     const date = state.activeDateFilter || '';
@@ -374,6 +522,68 @@
   renderRecent();
   renderCalendar();
   renderResults();
+=======
+  function initYearMonthFilters(){
+    const yearSel = $('#filterYear');
+    const monthSel = $('#filterMonth');
+    const thisYear = new Date().getFullYear();
+    for(let y=2021; y<=thisYear; y++){ const opt = document.createElement('option'); opt.value=y; opt.textContent=y+'년'; yearSel.appendChild(opt);}
+    for(let m=1; m<=12; m++){ const opt = document.createElement('option'); opt.value=m; opt.textContent=m+'월'; monthSel.appendChild(opt);}
+    yearSel.value=thisYear;
+    monthSel.value=new Date().getMonth()+1;
+  }
+  initYearMonthFilters();
+
+  function applyFiltersAndRender(){
+    const year = $('#filterYear').value;
+    const month = $('#filterMonth').value;
+    const keyword = (state.activeKeyword || '').toLowerCase().trim();
+
+    state.filtered = state.entries.filter(e=>{
+      if(!e.date) return false;
+      const {y,m} = parseYMD(e.date);
+      const matchYM = (!year || y==year) && (!month || m==month);
+      const hay = ((e.title||'')+' '+(e.body||e.text||'')).toLowerCase();
+      const matchKeyword = !keyword || hay.includes(keyword);
+      return matchYM && matchKeyword;
+    });
+
+    state.filtered.sort((a,b)=> (b.ts || 0) - (a.ts || 0));
+    renderResults();
+    renderStats();
+    renderRecent();
+    renderCalendar();
+  }
+
+  $('#filterYear').addEventListener('change', ()=>{ state.page=1; applyFiltersAndRender(); });
+  $('#filterMonth').addEventListener('change', ()=>{ state.page=1; applyFiltersAndRender(); });
+  $('#searchInput').addEventListener('input', (ev)=>{ state.activeKeyword = ev.target.value || ''; state.page=1; applyFiltersAndRender(); });
+  $('#resetBtn').addEventListener('click', ()=>{
+    $('#filterYear').value = new Date().getFullYear();
+    $('#filterMonth').value = new Date().getMonth()+1;
+    $('#searchInput').value='';
+    state.activeKeyword='';
+    state.page=1;
+    applyFiltersAndRender();
+  });
+
+  $('#prevPage').addEventListener('click', ()=>{ if(state.page>1){ state.page--; renderResults(); } });
+  $('#nextPage').addEventListener('click', ()=>{ const totalPages = Math.max(1, Math.ceil(state.filtered.length/state.perPage)); if(state.page<totalPages){ state.page++; renderResults(); } });
+
+  $('#prevM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1,1); renderCalendar(); });
+  $('#nextM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1,1); renderCalendar(); });
+
+  state.entries = loadLS('entries', []).map(e=>{
+    if(e && e.date){
+      const {y,m,d} = parseYMD(e.date);
+      if(y && m && d) e.date = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    return e;
+  });
+  state.filtered = state.entries.slice().sort((a,b)=> (b.ts||0)-(a.ts||0));
+  state.page=1;
+  applyFiltersAndRender();
+>>>>>>> db011250efa5581ff90b0106ae3d293129371ef7
 
 })();
 </script>

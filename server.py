@@ -1,170 +1,326 @@
-# server.py — Vision 우선, 1인칭 일기, 10장, 금지어 억제, CORS+HTML 제공, 관찰 로그 반환
-# 1) setx OPENAI_API_KEY "sk-..."  (새 터미널 열기)
-# 2) python server.py
-# 3) 브라우저: http://127.0.0.1:5000
+"""Snaplog server — 3단계(분석→초안→보정)로 20~30대 자연체 일기 생성"""
 
+from __future__ import annotations
+import os, re, json, random, traceback, time
+from threading import Lock
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from openai import OpenAI
-import os, traceback, re, json
+from openai import OpenAI, RateLimitError
 
+# ---------------- Flask ----------------
 app = Flask(__name__)
 CORS(app)
 
 # ---------------- OpenAI ----------------
 API_KEY = os.getenv("OPENAI_API_KEY")
 if not API_KEY:
-    raise RuntimeError("OPENAI_API_KEY 환경변수가 없습니다.")
+    raise RuntimeError('OPENAI_API_KEY 환경변수가 없습니다. Windows: setx OPENAI_API_KEY "sk-..."')
+
 client = OpenAI(api_key=API_KEY)
+MODEL_VISION = "gpt-4o-mini"
+MODEL_TEXT   = "gpt-4o-mini"
+MAX_IMAGES   = 10
+THROTTLE_SECONDS = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0.5"))
+MAX_WAIT_SECONDS = float(os.getenv("OPENAI_MAX_WAIT_SECONDS", "30"))
+_last_call_ts = 0.0
+_throttle_lock = Lock()
 
-MAX_IMAGES = 10
 
-# ---------------- 유틸/정규화 ----------------
+def throttled_chat_completion(**kwargs):
+    global _last_call_ts
+    backoff = THROTTLE_SECONDS
+    last_error: RateLimitError | None = None
+    total_wait = 0.0
+    while total_wait <= MAX_WAIT_SECONDS:
+        # 최소 호출 간격 확보
+        with _throttle_lock:
+            wait = THROTTLE_SECONDS - (time.monotonic() - _last_call_ts)
+        if wait > 0:
+            time.sleep(wait)
+            total_wait += wait
+
+        retry_secs = THROTTLE_SECONDS
+        with _throttle_lock:
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                _last_call_ts = time.monotonic()
+                return resp
+            except RateLimitError as e:
+                last_error = e
+                msg = str(e) or ""
+                retry_ms_match = re.search(r"try again in\s+(\d+)\s*ms", msg, re.I)
+                if retry_ms_match:
+                    retry_secs = max(retry_secs, float(retry_ms_match.group(1)) / 1000.0)
+                else:
+                    retry_secs = max(retry_secs, backoff)
+                _last_call_ts = time.monotonic() + retry_secs
+
+        time.sleep(retry_secs)
+        total_wait += retry_secs
+        backoff = min(backoff * 2, THROTTLE_SECONDS * 16)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Rate limit exhausted without meaningful error")
+
+# ---------------- 금지/정리 유틸 ----------------
 FILE_RE = re.compile(r"\b[\w\-]+\.(jpg|jpeg|png|webp|heic)\b", re.I)
 DATE_RE = re.compile(r"\b20\d{2}\s*[-.]?\s*\d{1,2}\s*[-.]?\s*\d{1,2}\b|\b20\d{2}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일\b")
-BAN_WORDS = [
-    "사진", "이미지", "촬영", "캡처", "찍힌", "장면이 담겼다",
+
+BAN_WORDS_INLINE = [
+    "사진", "이미지", "촬영", "캡처", "찍힌",
     "미상", "확인되지 않음", "unknown", "현재 시각",
-    "듯하다", "감돈다", "어우러져", "마치", "은은하다", "여운이 남는다",
-    "남성", "여성", "사람들", "군중", "여럿", "1명", "2명", "3명"
+]
+# 과장/감상문 느낌 줄이는 표현들(최종 보정에서 완화)
+TRIM_PHRASES = [
+    "일상적인 분위기로 가득 차 있었다",
+    "시각적으로도 즐거움을 주었다",
+    "상업적인 느낌을 더했다",
 ]
 
-def _one_line(s: str, max_len: int = 140) -> str:
-    """한 줄로 압축하고 메타/날짜/파일명 제거."""
+def clean_inline(s: str) -> str:
     if not s:
         return ""
     t = re.sub(r"\s+", " ", s).strip()
     t = FILE_RE.sub("", t)
     t = DATE_RE.sub("", t)
-    for w in BAN_WORDS:
+    for w in BAN_WORDS_INLINE:
         t = t.replace(w, "")
-    return t[:max_len].strip()
+    return t.strip()
+
+def soften_report_tone(text: str) -> str:
+    """설명문 어색한 표현 정리."""
+    if not text:
+        return text
+    t = text
+    for p in TRIM_PHRASES:
+        t = t.replace(p, "")
+    # 과도한 '있었다' 반복 완화(아주 약하게만)
+    t = re.sub(r"(있었다\.)\s+(있었다\.)", r"\1 ", t)
+    return t.strip()
 
 # ---------------- 카테고리 ----------------
 FOOD_RE = re.compile(r"(음식|식당|카페|요리|coffee|cafe|cake|bread|meal|lunch|dinner|brunch|dessert|커피|빵|케이크|디저트)", re.I)
-
-def decide_category(items):
-    if len(items) == 1:
-        return "food_single" if FOOD_RE.search(items[0].get("desc","")) else "general_single"
+def decide_category_from_lines(lines: list[str]) -> str:
+    if len(lines) == 1:
+        return "food_single" if FOOD_RE.search(lines[0]) else "general_single"
     return "journey_multi"
 
-# ---------------- Vision: 이미지 → 관찰 한 줄 ----------------
-def vision_images_to_items(images):
-    """각 이미지를 1회씩 호출해 '사실 기반 한 줄' 설명으로 리스트 생성."""
-    items = []
-    for du in images[:MAX_IMAGES]:
-        try:
-            img_url = du if du.startswith("data:image") else f"data:image/jpeg;base64,{du}"
-            r = client.chat.completions.create(
-                model="gpt-4o-mini",
-                temperature=0.0,
-                max_tokens=300,
-                messages=[
-                    {
-                        "role":"system",
-                        "content":(
-                            "사진에 보이는 사실만 한국어로 간결히 기술한다. "
-                            "파일명·날짜·메타(‘사진, 이미지, 촬영, ~에서 찍힌’) 금지. "
-                            "인원수·성별 추정 금지. 불확실하면 생략. 한 문장으로."
-                        )
-                    },
-                    {
-                        "role":"user",
-                        "content":[
-                            {"type":"text","text":
-                             "배경/대상/색/빛/활동 중 2~3개를 고르고 한 문장으로 요약. "
-                             "예) 핑크뮬리 풀밭과 검은 지붕 카페, 노을 빛"},
-                            {"type":"image_url","image_url":{"url": img_url}}
-                        ]
-                    }
-                ]
-            )
-            desc = _one_line(r.choices[0].message.content)
-            if not desc:
-                desc = "짧은 장면 설명"
-            items.append({"desc": desc})
-        except Exception as e:
-            print("Vision fail:", e)
-    return items
+# ---------------- 1) 분석: 이미지 → 구조화 JSON ----------------
+def analyze_images(images: list[str]) -> dict | None:
+    """
+    사진에서 확인 가능한 사실만 수집.
+    모델이 사진 순서/시간단서/실내외/장소 단서를 추출.
+    """
+    if not images:
+        return None
 
-# ---------------- 일기 프롬프트 ----------------
-GUIDE = {
-"journey_multi": (
-"1) 1인칭으로 시작. 장소명은 보일 때만 사용.\n"
-"2) 사진들을 시간순으로 연결. 이동·활동·빛·공간 변화를 중심으로.\n"
-"3) 마지막은 풍경/정리/시간의 흐름으로 닫기.\n"
-"문장 수: 5~7."
-),
-"general_single": (
-"1) 보이는 사실 2가지 이상(대상·색·빛·공간감)으로 시작.\n"
-"2) 내가 한 행동 1개 포함.\n"
-"3) 감각 단서 1개 포함(바람/소리/향/빛 등).\n"
-"문장 수: 3~4."
-),
-"food_single": (
-"1) 공간/분위기 + 음식은 장면의 일부로 간결히.\n"
-"2) 질감·향·온기 중 1개 감각 포함.\n"
-"3) 선택·머무름의 맥락 1문장 → 여운으로 마무리.\n"
-"문장 수: 3~4."
-)
-}
-
-RULES = (
-"- 1인칭 일기체. 3인칭 금지.\n"
-"- 날짜/파일명/메타표현(‘사진·이미지·촬영·캡처/~에서 찍힌’) 금지.\n"
-"- 성별·인원수 언급 금지. 관계 중심 표현만.\n"
-"- 입력에 없는 사실(정확한 장소명/정시/브랜드/대화) 생성 금지. 모르면 생략.\n"
-"- 금지어 예: 미상, 확인되지 않음, 듯하다, 감돈다, 어우러져, 마치.\n"
-"- 톤은 암시로만. 한 단락으로."
-)
-
-def build_prompt(items, tone):
-    category = decide_category(items)
-    lines = "\n".join([f"- {it.get('desc','')}" for it in items])
+    sys = "당신은 사진을 사실대로 기록하는 관찰자입니다."
     prompt = (
-        f"[사진 관찰]\n{lines}\n\n"
-        f"[감정 톤] {tone or '중립'}\n\n"
-        f"[지시문]\n{GUIDE[category]}\n\n"
-        f"[규칙]\n{RULES}\n"
-        "- 첫 문장은 ‘나는 …했다/하고 있다’로 시작.\n"
-        "- 한 단락으로 출력."
+        "아래 이미지를 **추측 없이** 관찰해 JSON으로 요약하세요.\n"
+        "- 메타표현(사진/이미지/촬영 등) 금지, 파일명/날짜 언급 금지\n"
+        "- 성별·인원수 추정 금지, 불확실하면 생략\n"
+        "- 각 사진에 대해: 핵심 한줄(summary), 보이는 요소(elements), 실내/실외(indoor_outdoor), 시간단서(time_hint: 오전/오후/저녁/밤 등), 장소단서(place_hint: 보이면 한 단어), 흐름단서(flow: 이동/머무름 등)\n"
+        "- 가능한 경우, 사진 내부의 표시(간판·메뉴판 등)를 **있다/없다** 수준으로만 언급\n\n"
+        "JSON 형식:\n"
+        "{\n"
+        "  \"frames\": [\n"
+        "     {\"index\": 1, \"summary\": \"...\", \"elements\": [\"...\"],\n"
+        "      \"indoor_outdoor\": \"indoor|outdoor|unknown\",\n"
+        "      \"time_hint\": \"오전|정오|오후|저녁|밤|불명\",\n"
+        "      \"place_hint\": \"보이면 한 단어, 없으면 빈 문자열\",\n"
+        "      \"flow\": \"이동|머무름|불명\"}\n"
+        "  ],\n"
+        "  \"global\": {\n"
+        "     \"dominant_time\": \"오전|정오|오후|저녁|밤|불명\",\n"
+        "     \"movement\": \"있음|없음|불명\"\n"
+        "  }\n"
+        "}"
     )
-    return category, prompt
 
-# ---------------- 일기 생성 ----------------
-def generate_diary(category, prompt):
-    r = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.2,
-        top_p=0.9,
-        max_tokens=420,
+    content = [{"type":"text","text": prompt}]
+    for data_url in images[:MAX_IMAGES]:
+        url = data_url if data_url.startswith("data:image") else f"data:image/jpeg;base64,{data_url}"
+        content.append({"type":"image_url","image_url":{"url": url, "detail":"high"}})
+
+    r = throttled_chat_completion(
+        model=MODEL_VISION,
+        temperature=0.0,
+        max_tokens=700,
+        response_format={"type":"json_object"},
         messages=[
-            {"role":"system",
-             "content":"관찰 사실+감각 기반의 한국어 1인칭 일기. "
-                       "첫 문장은 ‘나는 …했다/하고 있다’로 시작. "
-                       "추측/비유 과잉 금지. 메타표현·날짜·파일명·성별/인원 금지. "
-                       "문장 수 규칙 준수. 한 단락으로."},
-            {"role":"user","content": prompt}
+            {"role":"system","content": sys},
+            {"role":"user","content": content}
+        ]
+    )
+    try:
+        data = json.loads(r.choices[0].message.content or "{}")
+        # 안전 정리
+        frames = data.get("frames") or []
+        for f in frames:
+            f["summary"] = clean_inline(f.get("summary",""))
+            f["elements"] = [clean_inline(x) for x in (f.get("elements") or []) if x]
+        return data
+    except Exception as e:
+        print("분석 JSON 파싱 실패:", e)
+        return None
+
+# ---------------- 2) 초안: 20~30대 자연체로 일기 작성 ----------------
+def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
+    """
+    핵심: 설명문이 아니라 '말하듯' 쓰기. 짧고 긴 문장 섞기.
+    '~있었다' 반복 줄이고, 행동/감각을 섞어서 20~30대 일기 톤.
+    """
+    if not analysis:
+        return ""
+
+    frames = analysis.get("frames") or []
+    global_info = analysis.get("global") or {}
+
+    # 관찰 단서 나열
+    bullets = []
+    for f in frames:
+        idx = f.get("index")
+        s   = f.get("summary","")
+        io  = f.get("indoor_outdoor","")
+        tm  = f.get("time_hint","")
+        ph  = f.get("place_hint","")
+        flow= f.get("flow","")
+        parts = []
+        if s: parts.append(s)
+        if io and io!="unknown": parts.append(f"({io})")
+        if tm and tm!="불명": parts.append(f"[{tm}]")
+        if ph: parts.append(f"#{ph}")
+        if flow and flow!="불명": parts.append(f"{{{flow}}}")
+        if parts:
+            bullets.append(f"- {idx}번: " + " ".join(parts))
+
+    dom_time = global_info.get("dominant_time","불명")
+    movement = global_info.get("movement","불명")
+    header = f"[흐름] 시간:{dom_time} 이동:{movement}"
+
+    # 문장 수 규칙
+    length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
+
+    sys = (
+        "당신은 20~30대가 쓰는 한국어 일기를 잘 쓰는 작가입니다. "
+        "설명문이 아니라 '말하듯' 씁니다. 자연스러운 회상체로, 과장 없이 간결하게."
+    )
+    user = f"""
+아래 관찰 단서를 바탕으로 20~30대 자연체 일기를 **한 단락**으로 작성하세요.
+
+{header}
+[관찰]
+{os.linesep.join(bullets) if bullets else "- 단서 적음"}
+
+[작성 규칙 — 20~30대 자연체]
+- 말하듯 써라. 보고/하고/느낀 것을 짧고 긴 문장 섞어 표현.
+- '~있었다'만 반복하지 말고, '남아 있었다/눈에 들어왔다/한참 봤다/꺼냈다/잠깐 고민했다'처럼 변주하라.
+- 관찰 기반 + 작은 행동 + 가벼운 감각(빛·냄새·촉감)으로 암시.
+- 감정은 직접 말하기보다 '조금/잠깐/괜히' 같은 부사로 은은히.
+- 메타표현(사진/이미지/촬영 등) 금지, 파일명/날짜 금지.
+- 성별·인원수 추정 금지, 관계/거리감은 간접적으로.
+- {length_rule} 준수.
+- 톤: {tone or "중립"} (과장 금지, 담백하게).
+"""
+
+    r = throttled_chat_completion(
+        model=MODEL_TEXT,
+        temperature=0.35,
+        top_p=0.9,
+        max_tokens=600,
+        messages=[
+            {"role":"system","content": sys},
+            {"role":"user","content": user}
+        ]
+    )
+    draft = (r.choices[0].message.content or "").strip()
+    draft = clean_inline(draft)
+    return draft
+
+# ---------------- 3) 보정: 리듬/어조/반복 정리 ----------------
+def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: str) -> str:
+    if not draft:
+        return ""
+
+    frames = analysis.get("frames") or [] if analysis else []
+    length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
+
+    sys = "당신은 말하듯 쓰는 텍스트를 다듬는 한국어 에디터입니다."
+    user = f"""
+[초안]
+{draft}
+
+[보정 지침]
+- 설명문 느낌을 줄이고, 회상하듯 자연스러운 리듬으로.
+- 너무 딱딱한 명사구 연쇄, '일상적인 풍경' 같은 추상 표현은 구체로 치환하거나 제거.
+- 문장 길이와 어미를 다양화. '~있었다' 반복을 줄이고 필요한 곳만 남김.
+- 과장/비유/메타표현 금지 유지. 한 단락 유지.
+- 문장 수: {length_rule}. 톤: {tone or "중립"}.
+
+출력은 최종 문단만.
+"""
+    r = throttled_chat_completion(
+        model=MODEL_TEXT,
+        temperature=0.25,
+        max_tokens=700,
+        messages=[
+            {"role":"system","content": sys},
+            {"role":"user","content": user}
+        ]
+    )
+    final_text = (r.choices[0].message.content or "").strip()
+    final_text = clean_inline(final_text)
+    final_text = soften_report_tone(final_text)
+    return final_text
+
+# ---------------- 이미지 없을 때(요약 단서) ----------------
+def generate_from_lines(lines: list[str], tone: str) -> str:
+    cat = decide_category_from_lines(lines)
+    sys = "당신은 20~30대가 쓰는 한국어 일기를 잘 쓰는 작가입니다."
+    user = f"""
+[관찰 단서]
+{os.linesep.join(f"- {clean_inline(x)}" for x in lines)}
+
+[작성 규칙 — 20~30대 자연체]
+- 말하듯 써라. 짧고 긴 문장 섞기.
+- '~있었다' 반복 줄이기. 작은 행동과 감각 단서를 섞기.
+- 메타표현·날짜·파일명 금지. 성별/인원수 추정 금지.
+- 문장 수: {"5~7문장" if len(lines)>1 else "3~4문장"}.
+- 톤: {tone or "중립"}.
+- 한 단락만 출력.
+"""
+    r = throttled_chat_completion(
+        model=MODEL_TEXT,
+        temperature=0.35,
+        max_tokens=600,
+        messages=[
+            {"role":"system","content": sys},
+            {"role":"user","content": user}
         ]
     )
     text = (r.choices[0].message.content or "").strip()
-    if not text:
-        raise RuntimeError("empty generation")
-    # 최종 금지어/메타 클린업
-    text = _one_line(text, max_len=2000)
+    text = soften_report_tone(clean_inline(text))
     return text
 
-# ---------------- HTML 제공 ----------------
+# ---------------- Fallback ----------------
+FALLBACKS = [
+    "오늘은 별일 없었지만, 작은 장면들이 기억에 남았다.",
+    "짧게 움직였을 뿐인데 공기가 조금 달랐다.",
+    "별스러운 건 없었지만, 손끝에 남은 촉감이 오래 갔다.",
+]
+
+# ---------------- HTML ----------------
 @app.get("/")
 def index():
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test3.html")
+    # 프로젝트 루트에 있는 HTML 파일 이름을 환경에 맞게 바꾸세요.
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test4.html")
     if not os.path.exists(html_path):
-        return f"Error: Snaplog_test3.html을 찾을 수 없습니다. 경로: {html_path}", 404
+        return f"Error: {html_path} 가 없습니다.", 404
     return send_file(html_path)
 
 # ---------------- API ----------------
 @app.post("/api/auto-diary")
-def api_auto_diary():
+def api_auto_dairy():
     try:
         data = request.get_json(silent=True) or {}
         tone = data.get("tone") or "중립"
@@ -173,25 +329,82 @@ def api_auto_diary():
 
         print("[auto-diary] images:", len(images), "photosSummary:", len(photos))
 
-        items = vision_images_to_items(images) if images else []
-        if not items and photos:
-            # 비전 실패 시 폴백: 요약 desc만 사용
-            for p in photos:
-                desc = _one_line(p.get("desc",""))
-                if desc: items.append({"desc": desc})
-        if not items:
-            return jsonify({"ok": False, "error":"no_input", "message":"직접 입력하시거나 사진을 넣어주세요."}), 400
+        # 1) 이미지가 있는 경우: 분석 → 초안 → 보정
+        if images:
+            try:
+                analysis = analyze_images(images)
+                category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
+                draft = draft_diary(analysis, tone, category_hint)
+                final_text = refine_diary(analysis, draft, tone, category_hint)
+                if final_text:
+                    return jsonify({
+                        "ok": True,
+                        "body": final_text,
+                        "category": category_hint,
+                        "used": "vision-3stage",
+                        "observations": (analysis or {}).get("frames", [])
+                    })
+                # 파이프라인 실패 시 가벼운 폴백
+                return jsonify({
+                    "ok": True,
+                    "body": random.choice(FALLBACKS),
+                    "category": category_hint,
+                    "used": "fallback"
+                })
+            except RateLimitError as e:
+                msg = getattr(e, "message", None) or str(e) or "rate_limit"
+                retry_ms = None
+                body = getattr(e, "body", {}) or {}
+                err = body.get("error") if isinstance(body, dict) else {}
+                if isinstance(err, dict):
+                    retry_ms = err.get("retry_after")
+                if retry_ms is None:
+                    match = re.search(r"try again in\s+(\d+)\s*ms", msg, re.I)
+                    if match:
+                        retry_ms = int(match.group(1))
+                return jsonify({
+                    "ok": False,
+                    "error": "rate_limit",
+                    "message": msg,
+                    "retry_after_ms": retry_ms
+                }), 429
+            except Exception as e:
+                traceback.print_exc()
+                category_hint = "journey_multi" if len(images) > 1 else "general_single"
+                return jsonify({
+                    "ok": True,
+                    "body": random.choice(FALLBACKS),
+                    "category": category_hint,
+                    "used": "fallback",
+                    "error": str(e)
+                })
 
-        category, prompt = build_prompt(items, tone)
-        diary = generate_diary(category, prompt)
+        # 2) 이미지 없으면 photosSummary로 최소 단서 생성
+        lines: list[str] = []
+        for p in photos:
+            base = " ".join([
+                (p.get("place") or "").strip(),
+                (p.get("time") or "").strip(),
+                (p.get("weather") or "").strip(),
+                (p.get("desc") or "").strip(),
+            ]).strip()
+            base = clean_inline(base)
+            if base:
+                lines.append(base)
 
-        return jsonify({
-            "ok": True,
-            "body": diary,
-            "category": category,
-            "used": "vision" if images else "summary",
-            "observations": [it.get("desc","") for it in items]  # 디버깅/품질 확인용
-        })
+        if lines:
+            text = generate_from_lines(lines, tone)
+            if text:
+                return jsonify({
+                    "ok": True,
+                    "body": text,
+                    "category": decide_category_from_lines(lines),
+                    "used": "summary-lines",
+                    "observations": lines
+                })
+
+        return jsonify({"ok": False, "error": "no_input", "message": "사진을 넣거나 최소 단서를 제공하세요."}), 400
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -200,7 +413,7 @@ def api_auto_diary():
 def health():
     return {"ok": True}
 
-# ---------------- CORS/Preflight ----------------
+# ---------------- CORS ----------------
 @app.after_request
 def add_cors_headers(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"

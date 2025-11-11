@@ -1,14 +1,12 @@
 <!DOCTYPE html>
 
 <html data-theme="light" lang="ko">
- <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1" name="viewport"/>
-  <title>
-   스냅로그 | Snaplog
-  </title>
-  <style>
-   :root{
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>스냅로그 | Snaplog (mapper)</title>
+<style>
+:root{
   --bg-grad-1:#f3e9ff; --bg-grad-2:#d9f7ff; --bg-grad-3:#ffeaf2;
   --panel:rgba(255,255,255,.85); --card:rgba(255,255,255,.70);
   --text:#171717; --muted:#585e6a;
@@ -129,299 +127,129 @@ html[data-theme="dark"] .calendar .cell.saved{
   justify-content: center;
   gap: 2px !important;
 }
-  </style>
- </head>
- <body>
-  <div class="bg">
-   <!-- Intro -->
-   <div class="panel" id="intro">
-    <div class="intro" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-     <div class="hero">
-      스냅로그
-     </div>
-     <div class="sub">
-      사진으로 남기는 오늘의 순간
-     </div>
-     <div class="cta">
-      <button class="btn" id="startBtn">
-       시작하기
-      </button>
-     </div>
-    </div>
-   </div>
-   <!-- App -->
-   <div class="panel" id="app" style="display:none">
-    <div class="topbar">
-     <div class="brand">
-      스냅로그
-     </div>
-     <span class="badge" id="statAll">
-      전체 0
-     </span>
-     <span class="badge" id="statMonth">
-      이번 달 0
-     </span>
-     <span class="badge" id="statPhotos">
-      사진 0
-     </span>
-     <div class="spacer">
-     </div>
-     <div class="toggle" title="다크모드">
-      <span aria-hidden="true" class="label">
-       다크모드
-      </span>
-      <label class="switch">
-       <input id="darkToggleApp" type="checkbox"/>
-       <span class="slider">
-       </span>
-      </label>
-     </div>
-    </div>
-    <div class="layout" style="display:grid">
-     <aside class="card">
-      <div class="section-title">
-       달력
-      </div>
-      <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
-       <button class="btn ghost" id="prevM">
-        ◀︎
-       </button>
-       <div id="ym">
-       </div>
-       <button class="btn ghost" id="nextM">
-        ▶︎
-       </button>
-      </div>
-      <div class="calendar" id="calendar">
-      </div>
-      <hr style="opacity:.6; margin:12px 0"/>
-      <div class="section-title">
-       최근 기록
-      </div>
-      <div class="list small" id="recent">
-      </div>
-     </aside>
-     <section class="card">
-      <div class="section-title">
-       오늘의 기록
-      </div>
-      <div class="tools">
-       <label class="btn input-file daily_button">
-        사진 업로드
-        <input accept="image/*" id="file" multiple="" type="file"/>
-       </label>
-       <button class="btn daily_button" id="autoBtn">
-        자동 생성
-       </button>
-       <button class="btn daily_button" id="saveBtn">
-        저장
-       </button>
-       <button class="btn ghost daily_button" id="delBtn">
-        삭제
-       </button>
-      </div>
-      <div style="margin-top:10px; position:relative">
-       <div class="preview-wrap" id="previewWrap">
-        <span class="ph">
-         미리보기
-        </span>
-        <img alt="미리보기" class="preview" id="preview"/>
-        <button class="nav-arrow" id="navPrev">
-         ‹
-        </button>
-        <button class="nav-arrow" id="navNext">
-         ›
-        </button>
-       </div>
-       <div class="gallery" id="galleryBar">
-        <div class="camera-tile" id="cameraTile">
-         <div class="cam-icon">
-          📷
-         </div>
-         <div class="cam-count">
-          <span id="camCount">
-           0
-          </span>
-          /10
-         </div>
-        </div>
-        <div class="thumbs" id="thumbs">
-        </div>
-       </div>
-      </div>
-      <div class="editor">
-       <input class="titlebox" id="title" maxlength="20" placeholder="제목(최대 20자)" type="text"/>
-      </div>
-      <div class="editor">
-       <textarea class="textbox" id="text" placeholder="자동으로 생성되거나 직접 적을 수 있음"></textarea>
-      </div>
-      <div class="tabs">
-       <div class="tab active">
-        일기
-       </div>
-       <div class="tab">
-        지도
-       </div>
-       <div class="tab">
-        전체일기
-       </div>
-      </div>
-     </section>
-    </div>
-   </div>
-  </div>
+</style>
+<!-- include exif-js for reading image metadata -->
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+<!-- Leaflet + MarkerCluster -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+</head>
+<body>
+<div class="bg">
+<!-- Intro -->
+<div class="panel" id="intro">
+<div class="intro" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+<div class="hero">스냅로그</div>
+<div class="sub">사진으로 남기는 오늘의 순간</div>
+<div class="cta"><button class="btn" id="startBtn">시작하기</button></div>
+</div>
+</div>
+<!-- App -->
+<div class="panel" id="app" style="display:none">
+<div class="topbar">
+<div class="brand">스냅로그</div>
+<span class="badge" id="statAll">전체 0</span>
+<span class="badge" id="statMonth">이번 달 0</span>
+<span class="badge" id="statPhotos">사진 0</span>
+<div class="spacer"></div>
+<div class="toggle" title="다크모드">
+<span aria-hidden="true" class="label">다크모드</span>
+<label class="switch"><input id="darkToggleApp" type="checkbox"/><span class="slider"></span></label>
+</div>
+</div>
+<div class="layout" style="display:grid">
+<aside class="card">
+<div class="section-title">달력</div>
+<div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
+<button class="btn ghost" id="prevM">◀︎</button>
+<div id="ym"></div>
+<button class="btn ghost" id="nextM">▶︎</button>
+</div>
+<div class="calendar" id="calendar"></div>
+<hr style="opacity:.6; margin:12px 0"/>
+<div class="section-title">최근 기록</div>
+<div class="list small" id="recent"></div>
+</aside>
+<section class="card">
+<div class="section-title">오늘의 기록</div>
+<div class="tools">
+<label class="btn input-file daily_button">사진 업로드
+            <input accept="image/*" id="file" multiple="" type="file"/>
+</label>
+<button class="btn daily_button" id="autoBtn">자동 생성</button>
+<button class="btn daily_button" id="saveBtn">저장</button>
+<button class="btn ghost daily_button" id="delBtn">삭제</button>
+</div>
+<div style="margin-top:10px; position:relative">
+<div class="preview-wrap" id="previewWrap">
+<span class="ph">미리보기</span>
+<img alt="미리보기" class="preview" id="preview"/>
+<button class="nav-arrow" id="navPrev">‹</button>
+<button class="nav-arrow" id="navNext">›</button>
+</div>
+<div class="gallery" id="galleryBar">
+<div class="camera-tile" id="cameraTile">
+<div class="cam-icon">📷</div>
+<div class="cam-count"><span id="camCount">0</span>/10</div>
+</div>
+<div class="thumbs" id="thumbs"></div>
+</div>
+</div>
+<div class="editor">
+<input class="titlebox" id="title" maxlength="20" placeholder="제목(최대 20자)" type="text"/>
+</div>
+<div class="editor">
+<textarea class="textbox" id="text" placeholder="자동으로 생성되거나 직접 적을 수 있음"></textarea>
+</div>
+<div class="tabs">
+<div class="tab active">일기</div>
+<div class="tab">지도</div>
+<div class="tab">전체일기</div>
+</div>
+<!-- map container shown when Map tab selected -->
+<div id="mapContainer" style="display:none; margin-top:12px;">
+  <div id="map" style="height:500px; border-radius:12px;"></div>
+</div>
+</section>
+</div>
+</div>
+</div>
+
+<!-- ✅ 외부 JS 라이브러리 (항상 body 닫히기 직전) -->
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
 <script>
 (function(){
   "use strict";
 
-  // ================== 설정 ==================
-  const API_URL = "http://127.0.0.1:5000/api/auto-diary";
-  const FOOD_HINTS = ['food','meal','lunch','dinner','breakfast','cafe','coffee','cake','bread','noodle','ramen','pizza','burger','pasta','sushi','식당','밥','점심','저녁','아침','카페','커피','케이크','빵','라면','피자','버거','파스타','스시'];
-  const MAX_UPLOAD = 10;
-
-  // ================== 유틸 ==================
   const $ = (s,p=document)=>p.querySelector(s);
   const $$ = (s,p=document)=>Array.from(p.querySelectorAll(s));
   function saveLS(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn("save fail",k,e); } }
   function loadLS(k,f){ try{ const v=localStorage.getItem(k); return v? JSON.parse(v): f; }catch(e){ return f; } }
   function newId(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
   function getMonthKey(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0'); }
-  function parseYMD(s){ const [y,m,d] = (s||"").split("-").map(x=>parseInt(x,10)); return {y,m,d}; }
 
-  // 이미지 축소(JPEG) → dataURL
-  async function downscaleToDataURL(file, maxSide=1280, quality=0.8){
-    const img = await new Promise((res,rej)=>{
-      const fr = new FileReader();
-      fr.onload = ()=>{ const i = new Image(); i.onload=()=>res(i); i.onerror=rej; i.src = fr.result; };
-      fr.onerror = rej; fr.readAsDataURL(file);
-    });
-    const w = img.naturalWidth, h = img.naturalHeight;
-    const ratio = w > h ? maxSide / w : maxSide / h;
-    const nw = ratio < 1 ? Math.round(w*ratio) : w;
-    const nh = ratio < 1 ? Math.round(h*ratio) : h;
-    const canvas = document.createElement('canvas');
-    canvas.width = nw; canvas.height = nh;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, nw, nh);
-    return canvas.toDataURL('image/jpeg', quality);
-  }
-
-  // ================== 상태 ==================
   const state = {
     entries: loadLS('entries', []),
     theme: loadLS('theme','light'),
     cursor:null,
     cal:new Date(),
-    tempPhotos:[],
-    tempNames:[],
+    tempPhotos:[], // data URLs for preview
+    tempFileObjects:[], // original File objects to extract EXIF
     repIndex:0,
-    viewIndex:0,
-    tone:'중립'
+    viewIndex:0
   };
 
-  // ================== 분류/라벨 ==================
-  function classifyCategory(fileNames){
-    if(!fileNames || !fileNames.length) return 'general_single';
-    if(fileNames.length === 1){
-      const n = (fileNames[0]||'').toLowerCase();
-      const isFood = FOOD_HINTS.some(k=> n.includes(k));
-      return isFood ? 'food_single' : 'general_single';
-    }
-    return 'journey_multi';
-  }
-
-  function normalizeTimeLabel(idx, total){
-    if(total<=1) return '오후';
-    const ratio = idx/(total-1);
-    if(ratio < 0.25) return '오전';
-    if(ratio < 0.5) return '정오';
-    if(ratio < 0.75) return '오후';
-    return '저녁';
-  }
-
-  // ================== Summary (파일명/“미상” 제거) ==================
-  function buildPhotosSummary(state){
-    const total = state.tempPhotos.length;
-    const now = new Date();
-    const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const arr = [];
-    for(let i=0;i<total;i++){
-      arr.push({
-        place: '',                                 // 비워둠
-        time: `${ymd} ${normalizeTimeLabel(i,total)}`,
-        weather: '',                               // 비워둠
-        desc: ''                                   // 파일명 유래 텍스트 금지
-      });
-    }
-    return arr;
-  }
-
-  // ================== Vision API 호출 ==================
-  async function callAutoDiaryAPI(images, photosSummary, tone){
-    if(!API_URL) return null;
-    const ctrl = new AbortController();
-    const t = setTimeout(()=>ctrl.abort('timeout'), 45000); // 45s
-    try{
-      const r = await fetch(API_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ tone, images, photosSummary }),
-        signal: ctrl.signal
-      });
-      clearTimeout(t);
-      const text = await r.text();
-      let data = null;
-      try{ data = JSON.parse(text); }catch{}
-      if(!r.ok){
-        const msg = data?.error || data?.message || (`HTTP ${r.status}: `+text.slice(0,200));
-        alert('자동생성 실패: '+msg);
-        return null;
-      }
-      if(data && data.ok) return data;
-      alert('자동생성 실패: '+(data?.error || 'unknown'));
-      return null;
-    }catch(e){
-      clearTimeout(t);
-      alert('자동생성 서버 응답이 없습니다: '+e);
-      return null;
-    }
-  }
-
-  // ================== Fallback 문장 자연화 ==================
-  function fallbackGenerate(photosSummary, cat){
-    const n = photosSummary.length;
-    const s = x => x || '';
-
-    if(cat === 'journey_multi' && n>=2){
-      const a = photosSummary;
-      const t0 = s(a[0].time).split(' ').pop();
-      const first = s(a[0].place) ? `${s(a[0].place)}에서 ${t0}에 하루를 열었다.` : `${t0}에 하루를 열었다.`;
-      const parts = [first];
-      for(let i=1;i<n-1;i++){
-        const seg = [];
-        if (s(a[i].place)) seg.push(`${s(a[i].place)}로 옮기며`);
-        if (s(a[i].desc))  seg.push(`${s(a[i].desc)}을 지나쳤다`);
-        parts.push(seg.length ? seg.join(' ') + '.' : '잠시 걸음을 늦췄다.');
-      }
-      parts.push(`${s(a[n-1].place) || '주변'}의 빛이 천천히 바뀌었다.`);
-      parts.push('남은 소리와 온기가 조용히 정리되었다.');
-      return parts.slice(0,7).join("\n");
-    } else {
-      const p = photosSummary[0] || {place:'', time:'오후', weather:'', desc:''};
-      const tpart = s(p.time).split(' ').pop();
-      const first = s(p.place) ? `${s(p.place)}에서 ${tpart}에 잠시 멈췄다.` : `${tpart}에 잠시 멈췄다.`;
-      const parts = [first];
-      if (s(p.desc)) parts.push(`${s(p.desc)}이 눈에 들어왔다.`);
-      parts.push('숨을 고르니 공간의 결이 또렷해졌다.');
-      parts.push('짧은 고요가 오늘의 끝을 부드럽게 덮었다.');
-      return parts.slice(0,4).join("\n");
-    }
-  }
-
-  // ================== 테마 ==================
   function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); saveLS('theme', t); }
 
-  // ================== 렌더러 ==================
+  function parseYMD(s){ const [y,m,d] = (s||"").split("-").map(x=>parseInt(x,10)); return {y,m,d}; }
+
+  // ---------- rendering ----------
   function renderStats(){
     const all = state.entries.length;
     const monthKey = getMonthKey(new Date());
@@ -460,6 +288,7 @@ html[data-theme="dark"] .calendar .cell.saved{
 
     for(let i=0;i<firstDay;i++){ const e=document.createElement('div'); e.className='cell head'; e.style.visibility='hidden'; cal.appendChild(e); }
 
+    // Use entry.date (Y-M-D) to avoid timezone issues
     const saved = new Set(state.entries.filter(e=>{
       if(!e.date) return false;
       const {y,m} = parseYMD(e.date);
@@ -484,11 +313,11 @@ html[data-theme="dark"] .calendar .cell.saved{
     const img=$('#preview'); const ph=$('#previewWrap .ph'); const pw=$('#previewWrap');
     if(!state.cursor){
       if(img){ img.src=''; img.style.display='none'; } if(ph){ ph.style.display='grid'; } if(pw){ pw.classList.remove('has-image'); }
-      $('#text').value=''; const ti=$('#title'); if(ti) ti.value=''; state.tempPhotos=[]; state.tempNames=[]; state.repIndex=0; state.viewIndex=0; renderGallery(); return;
+      $('#text').value=''; const ti=$('#title'); if(ti) ti.value=''; state.tempPhotos=[]; state.tempFileObjects=[]; state.repIndex=0; state.viewIndex=0; renderGallery(); return;
     }
     const e = state.entries.find(x=>x.id===state.cursor); if(!e) return;
-    state.tempPhotos = Array.isArray(e.photos)? e.photos.slice(0,MAX_UPLOAD) : (e.photo ? [e.photo] : []);
-    state.tempNames = e.notes?.map(n=> n?.desc || '') || [];
+    state.tempPhotos = Array.isArray(e.photos)? e.photos.slice(0,10) : (e.photo ? [e.photo] : []);
+    // We don't have file objects for saved entries; tempFileObjects will only be for newly uploaded files before save
     state.repIndex = e.repIndex || 0; state.viewIndex = state.repIndex;
     if(state.tempPhotos.length && img){
       img.onload=()=>{ img.style.display='block'; if(ph) ph.style.display='none'; if(pw) pw.classList.add('has-image'); };
@@ -514,7 +343,7 @@ html[data-theme="dark"] .calendar .cell.saved{
       const t=document.createElement('div'); t.className='thumb';
       const im=document.createElement('img'); im.src=src;
       const x=document.createElement('div'); x.className='x'; x.textContent='×';
-      x.onclick=()=>{ state.tempPhotos.splice(i,1); if(state.tempNames) state.tempNames.splice(i,1); if(state.repIndex>=state.tempPhotos.length) state.repIndex=Math.max(0,state.tempPhotos.length-1); renderGallery(); updatePreviewFromView(); };
+      x.onclick=()=>{ state.tempPhotos.splice(i,1); state.tempFileObjects.splice(i,1); if(state.repIndex>=state.tempPhotos.length) state.repIndex=Math.max(0,state.tempPhotos.length-1); renderGallery(); updatePreviewFromView(); };
       const badge=document.createElement('div'); badge.className='badge'; badge.textContent = (i===state.repIndex)?'대표사진':'대표로';
       badge.onclick=()=>{ state.repIndex=i; state.viewIndex=i; updatePreviewFromView(); renderGallery(); };
       t.append(im,x,badge);
@@ -533,8 +362,9 @@ html[data-theme="dark"] .calendar .cell.saved{
     }
   }
 
+  // ---------- actions ----------
   function resetComposer(){
-    state.cursor=null; state.tempPhotos=[]; state.tempNames=[]; state.repIndex=0; state.viewIndex=0;
+    state.cursor=null; state.tempPhotos=[]; state.tempFileObjects=[]; state.repIndex=0; state.viewIndex=0;
     const img=$('#preview'); const ph=$('#previewWrap .ph'); const pw=$('#previewWrap');
     const ta=$('#text'); const ti=$('#title'); const fi=$('#file');
     if(fi) fi.value=''; if(img){ img.src=''; img.style.display='none'; } if(ph){ ph.style.display='grid'; } if(pw){ pw.classList.remove('has-image'); }
@@ -544,141 +374,246 @@ html[data-theme="dark"] .calendar .cell.saved{
 
   function renderAll(){ renderStats(); renderRecent(); renderCalendar(); reflectCurrent(); }
 
-  // ================== 초기 바인딩(인트로 포함) ==================
+  // ---------- event wiring (single binding) ----------
   window.addEventListener('load', ()=>{
-    // 테마
+    // theme
     applyTheme(state.theme);
     const darkToggleApp = $('#darkToggleApp');
-    if(darkToggleApp){
-      darkToggleApp.checked = state.theme==='dark';
-      darkToggleApp.addEventListener('change', ()=>{
-        state.theme = darkToggleApp.checked?'dark':'light';
-        applyTheme(state.theme);
+    if(darkToggleApp){ darkToggleApp.checked = state.theme==='dark'; darkToggleApp.addEventListener('change', ()=>{ state.theme = darkToggleApp.checked?'dark':'light'; applyTheme(state.theme); }); }
+
+    // intro switch
+    $('#intro').style.display='block'; $('#app').style.display='none';
+    async function mergeEntriesFromIDB(){
+      try{
+        const idb = await getAllFromIDB();
+        if(idb && idb.length){
+          const byId = new Map((state.entries||[]).map(e=>[e.id,e]));
+          idb.forEach(e=> byId.set(e.id,e));
+          state.entries = Array.from(byId.values());
+          saveLS('entries', state.entries);
+        }
+      }catch(e){ console.warn('mergeEntriesFromIDB failed', e); }
+    }
+
+    $('#startBtn').addEventListener('click', async ()=>{ resetComposer(); $('#intro').style.display='none'; $('#app').style.display='block'; await mergeEntriesFromIDB(); renderAll(); });
+
+    // month nav
+    $('#prevM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1, 1); renderCalendar(); });
+    $('#nextM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1, 1); renderCalendar(); });
+
+    // camera tile
+    $('#cameraTile').addEventListener('click', ()=> $('#file').click());
+
+    // file input multiple -- keep file objects for EXIF and dataURLs for preview
+    // $('#file').addEventListener('change', ev=>{
+    //   const files = Array.from(ev.target.files || []); if(!files.length) return;
+    //   const remain = 10 - state.tempPhotos.length; const pick = files.slice(0, remain);
+    //   let loaded = 0;
+    //   pick.forEach((f, idx)=>{
+    //     const reader = new FileReader();
+    //     reader.onload = e=>{ state.tempPhotos.push(String(e.target.result)); state.tempFileObjects.push(f); loaded++; if(loaded===pick.length){ state.repIndex = 0; state.viewIndex = 0; renderGallery(); updatePreviewFromView(); } };
+    //     reader.readAsDataURL(f);
+    //   });
+    // });
+
+    // file input multiple -- keep file objects for EXIF and dataURLs for preview
+    $('#file').addEventListener('change', ev=>{
+      const files = Array.from(ev.target.files || []); if(!files.length) return;
+      const remain = 10 - state.tempPhotos.length; const pick = files.slice(0, remain);
+      let loaded = 0;
+      pick.forEach((f, idx)=>{
+        const reader = new FileReader();
+        reader.onload = e=>{ state.tempPhotos.push(String(e.target.result)); state.tempFileObjects.push(f); loaded++; if(loaded===pick.length){ state.repIndex = 0; state.viewIndex = 0; renderGallery(); updatePreviewFromView(); } };
+        reader.readAsDataURL(f);
       });
-    }
+    });
 
-    // 인트로 → 앱 전환
-    const intro = $('#intro');
-    const app = $('#app');
-    if(intro && app){
-      intro.style.display='block';
-      app.style.display='none';
-      const startBtn = $('#startBtn');
-      if(startBtn){
-        startBtn.addEventListener('click', ()=>{
-          resetComposer();
-          intro.style.display='none';
-          app.style.display='block';
-          renderAll();
-        });
-      }
-    }
+    // auto text
+    $('#autoBtn').addEventListener('click', ()=>{ if(!$('#text').value){ $('#text').value='구름이 얇아지고 공기가 가벼워졌다. 오늘은 조용히 흐르는 리듬.'; } });
 
-    // 달력 월 이동
-    const prevM = $('#prevM'), nextM = $('#nextM');
-    if(prevM) prevM.addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1, 1); renderCalendar(); });
-    if(nextM) nextM.addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1, 1); renderCalendar(); });
+    // save - extended: extract EXIF and attempt localStorage save, compress if needed, fallback to IndexedDB
+    $('#saveBtn').addEventListener('click', async ()=>{
+      try{
+        const body = ($('#text')?.value || '').trim();
+        const ti=$('#title'); const title = (ti && ti.value ? ti.value : '제목 없음').slice(0,20);
+        if(!body){ alert('일기 내용이 비어 있음.'); return; }
 
-    // 카메라 타일
-    const cameraTile = $('#cameraTile'); if(cameraTile) cameraTile.addEventListener('click', ()=> $('#file').click());
+        // extract exif from representative file object if exists
+        const repFile = state.tempFileObjects[state.repIndex] || null;
+        let exif = { dateTaken: null, latitude: null, longitude: null };
+        if(repFile){
+          exif = await getExifFromFile(repFile);
+        }
 
-    // 파일 업로드(여러 장, 축소 저장)
-    const fileInput = $('#file');
-    if(fileInput){
-      fileInput.addEventListener('change', async (ev)=>{
-        const files = Array.from(ev.target.files || []); if(!files.length) return;
-        state.tempNames = state.tempNames || [];
-        const remain = MAX_UPLOAD - state.tempPhotos.length; const pick = files.slice(0, remain);
-        let loaded = 0;
-        for(const f of pick){
+        const now = new Date();
+        const entry = {
+          id: state.cursor || newId(),
+          title,
+          body,
+          photo: state.tempPhotos[state.repIndex] || '',
+          photos: state.tempPhotos.slice(0,10),
+          repIndex: state.repIndex,
+          date: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,
+          ts: now.getTime(),
+          // EXIF fields
+          exifDate: exif.dateTaken || null,
+          latitude: (exif.latitude !== undefined ? exif.latitude : null),
+          longitude: (exif.longitude !== undefined ? exif.longitude : null),
+          // track storage location
+          storedInIDB: false
+        };
+
+        // attempt to save to localStorage; if quota error, try compressing image, then finally save into IndexedDB
+        async function trySaveToLocal(entriesArr){
           try{
-            const durl = await downscaleToDataURL(f, 1280, 0.8);
-            state.tempPhotos.push(durl);
-            state.tempNames.push(f.name||'');
-            loaded++;
-            if(loaded===pick.length){
-              state.repIndex = 0; state.viewIndex = 0;
-              renderGallery(); updatePreviewFromView();
-            }
-          }catch(e){
-            console.warn('resize fail', e);
+            localStorage.setItem('entries', JSON.stringify(entriesArr));
+            return true;
+          }catch(err){
+            console.warn('localStorage setItem failed', err);
+            return false;
           }
         }
-      });
-    }
 
-    // 자동생성
-    const autoBtn = $('#autoBtn');
-    if(autoBtn){
-      autoBtn.addEventListener('click', async ()=>{
-        if(!state.tempPhotos || state.tempPhotos.length===0){
-          alert('직접 입력하시거나 사진을 넣어주세요');
-          return;
+        // compress a dataURL image using canvas
+        function compressDataUrl(dataUrl, maxWidth=1280, quality=0.7){
+          return new Promise((resolve,reject)=>{
+            const img = new Image();
+            img.onload = ()=>{
+              const canvas = document.createElement('canvas');
+              let w = img.width, h = img.height;
+              if(w>maxWidth){ h = Math.round(h*(maxWidth/w)); w = maxWidth; }
+              canvas.width = w; canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img,0,0,w,h);
+              try{ const out = canvas.toDataURL('image/jpeg', quality); resolve(out); }catch(e){ reject(e); }
+            };
+            img.onerror = ()=>reject(new Error('image load failed'));
+            img.src = dataUrl;
+          });
         }
-        const photosSummary = buildPhotosSummary(state);
-        const tone = state.tone || '중립';
-        const images = state.tempPhotos.slice(0,MAX_UPLOAD);
-        console.log('send images:', images.length);
 
-        const api = await callAutoDiaryAPI(images, photosSummary, tone);
-        if(!api){ return; } // alert는 callAutoDiaryAPI 내에서 처리
-        console.log('auto-diary used:', api.used);
-
-        const category = classifyCategory(state.tempNames||[]);
-        const resultText = api.body || fallbackGenerate(photosSummary, category);
-        const ta=$('#text'); if(ta) ta.value = resultText;
-      });
-    }
-
-    // 저장
-    const saveBtn = $('#saveBtn');
-    if(saveBtn){
-      saveBtn.addEventListener('click', ()=>{
-        try{
-          const body = ($('#text')?.value || '').trim();
-          const ti=$('#title'); const title = (ti && ti.value ? ti.value : '제목 없음').slice(0,20);
-          if(!body){ alert('일기 내용이 비어 있습니다.'); return; }
-          const now = new Date();
-          const entry = {
-            id: state.cursor || newId(),
-            title, body,
-            photo: state.tempPhotos[state.repIndex] || '',
-            photos: state.tempPhotos.slice(0,MAX_UPLOAD),
-            repIndex: state.repIndex,
-            notes: buildPhotosSummary(state),
-            tone: state.tone || '중립',
-            date: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,
-            ts: now.getTime()
-          };
-          const idx = state.entries.findIndex(e=>e.id===entry.id);
-          if(idx>=0) state.entries[idx]=entry; else state.entries.push(entry);
-          state.cursor = entry.id;
-          saveLS('entries', state.entries);
-          renderRecent(); renderStats(); renderCalendar(); reflectCurrent();
-        }catch(e){
-          console.error(e);
-          alert('저장 중 오류가 발생했습니다.');
+        // IndexedDB helpers
+        function openDB(){
+          return new Promise((resolve,reject)=>{
+            const r = indexedDB.open('snaplog-db',1);
+            r.onupgradeneeded = ()=>{ const db=r.result; if(!db.objectStoreNames.contains('entries')) db.createObjectStore('entries',{keyPath:'id'}); };
+            r.onsuccess = ()=>resolve(r.result);
+            r.onerror = ()=>reject(r.error);
+          });
         }
-      });
-    }
+        async function saveEntryToIDB(ent){
+          const db = await openDB();
+          return new Promise((resolve,reject)=>{
+            const tx = db.transaction('entries','readwrite');
+            const store = tx.objectStore('entries');
+            store.put(ent);
+            tx.oncomplete = ()=>{ resolve(true); db.close(); };
+            tx.onerror = ()=>{ reject(tx.error); db.close(); };
+          });
+        }
+        async function getAllFromIDB(){ const db = await openDB(); return new Promise((resolve,reject)=>{ const tx=db.transaction('entries','readonly'); const cur = tx.objectStore('entries').getAll(); cur.onsuccess=()=>{ resolve(cur.result); db.close(); }; cur.onerror=()=>{ reject(cur.error); db.close(); }; }); }
 
-    // 삭제
-    const delBtn = $('#delBtn');
-    if(delBtn){
-      delBtn.addEventListener('click', ()=>{
-        if(!state.cursor){ resetComposer(); return; }
-        state.entries = state.entries.filter(e=>e.id!==state.cursor);
-        saveLS('entries', state.entries);
-        resetComposer(); renderAll();
-      });
-    }
+        // try naive localStorage save first
+        let entriesArr = JSON.parse(localStorage.getItem('entries') || '[]');
+        const idx = entriesArr.findIndex(e=>e.id===entry.id);
+        if(idx>=0) entriesArr[idx]=entry; else entriesArr.push(entry);
+        let ok = await trySaveToLocal(entriesArr);
+        if(!ok){
+          // try compression attempts on photos (if present)
+          const attempts = [{w:1280,q:0.7},{w:800,q:0.6},{w:600,q:0.5},{w:400,q:0.4}];
+          let saved=false;
+          for(const a of attempts){
+            try{
+              if(entry.photo){
+                const compressed = await compressDataUrl(entry.photo, a.w, a.q);
+                entry.photo = compressed; entry.photos = entry.photos.map((p,i)=> i===entry.repIndex? compressed : p);
+              }
+              // rebuild entriesArr with updated entry
+              entriesArr = JSON.parse(localStorage.getItem('entries') || '[]');
+              const j = entriesArr.findIndex(e=>e.id===entry.id);
+              if(j>=0) entriesArr[j]=entry; else entriesArr.push(entry);
+              ok = await trySaveToLocal(entriesArr);
+              if(ok){ saved=true; break; }
+            }catch(e){ console.warn('compress attempt failed',a,e); }
+          }
+          if(!ok){
+            // last resort: save the full entry into IndexedDB and store a lightweight marker in localStorage
+            try{
+              entry.storedInIDB = true;
+              await saveEntryToIDB(entry);
+              // store lightweight representation in localStorage (metadata only)
+              const lightweight = Object.assign({}, entry, { photo: null, photos: [], storedInIDB:true });
+              entriesArr = JSON.parse(localStorage.getItem('entries') || '[]');
+              const j2 = entriesArr.findIndex(e=>e.id===lightweight.id);
+              if(j2>=0) entriesArr[j2]=lightweight; else entriesArr.push(lightweight);
+              try{ localStorage.setItem('entries', JSON.stringify(entriesArr)); }catch(e){ console.warn('could not write lightweight marker to localStorage',e); }
+              ok = true;
+            }catch(idbErr){
+              console.error('Failed to save to IDB as well', idbErr);
+              ok = false;
+            }
+          }
+        }
 
-    // 캐러셀
-    const prev = $('#navPrev'), next = $('#navNext');
-    if(prev) prev.addEventListener('click', ()=>{ if(state.tempPhotos.length){ state.viewIndex = (state.viewIndex - 1 + state.tempPhotos.length) % state.tempPhotos.length; updatePreviewFromView(); } });
-    if(next) next.addEventListener('click', ()=>{ if(state.tempPhotos.length){ state.viewIndex = (state.viewIndex + 1) % state.tempPhotos.length; updatePreviewFromView(); } });
+        // finish
+        if(ok){
+          state.cursor = entry.id; renderRecent(); renderStats(); renderCalendar(); reflectCurrent();
+        }else{
+          alert('저장이 실패했습니다. 브라우저 저장소가 부족합니다.');
+        }
+      }catch(e){
+        console.error(e);
+        alert('저장 중 오류가 발생했어.');
+      }
+    });
+
+// ✅ IndexedDB에서 특정 entry 삭제 + 목록 갱신
+async function deleteEntryFromIDB(id){
+  try {
+    const db = await openDB();
+    const tx = db.transaction('entries', 'readwrite');
+    tx.objectStore('entries').delete(id);
+    await new Promise((resolve, reject)=>{
+      tx.oncomplete = resolve;
+      tx.onerror = ()=>reject(tx.error);
+    });
+    db.close();
+
+    // 삭제 후 localStorage 동기화 (entries에서도 제거)
+    state.entries = state.entries.filter(e => e.id !== id);
+    saveLS('entries', state.entries);
+
+    // UI 새로고침
+    resetComposer();
+    renderAll();
+    alert('삭제되었습니다.');
+  } catch(err){
+    console.error('deleteEntryFromIDB failed', err);
+    alert('삭제 중 오류가 발생했습니다.');
+  }
+}
+
+// ✅ delete button event
+$('#delBtn').addEventListener('click', async ()=>{
+  if(!state.cursor){
+    alert('삭제할 일기를 선택하세요.');
+    return;
+  }
+  if(!confirm('정말 삭제하시겠습니까?')) return;
+  await deleteEntryFromIDB(state.cursor);
+});
+   
+    // carousel
+    $('#navPrev').addEventListener('click', ()=>{ if(state.tempPhotos.length){ state.viewIndex = (state.viewIndex - 1 + state.tempPhotos.length) % state.tempPhotos.length; updatePreviewFromView(); } });
+    $('#navNext').addEventListener('click', ()=>{ if(state.tempPhotos.length){ state.viewIndex = (state.viewIndex + 1) % state.tempPhotos.length; updatePreviewFromView(); } });
   });
 })();
 </script>
- </body>
+
+<!-- ✅ 앱 전용 JS 파일 (순서 중요) -->
+<script src="exif.js"></script>
+<script src="btn.js"></script>
+<script src="tab.js"></script>
+
+</body>
 </html>
