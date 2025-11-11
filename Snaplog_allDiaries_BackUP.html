@@ -25,6 +25,9 @@
     .card-footer { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
     .pager { display:flex; gap:8px; align-items:center; justify-content:center; }
     .pager .btn { padding:8px 12px; height:40px; border-radius:10px; }
+    /* .tabs { display:flex; gap:6px; justify-content:center; }
+    .tabs .tab { flex:1; text-align:center; padding:8px 0; border-radius:10px; cursor:pointer; }
+    .tabs .active { background:var(--line-strong); color:var(--card); font-weight:600; } */
     .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.25); align-items:center; justify-content:center; padding:20px; z-index:60; }
     .modal .card { width:min(900px, 96vw); max-height:80vh; overflow:auto; }
     @media (max-width:900px){ .layout{ grid-template-columns: 1fr; } }
@@ -91,6 +94,13 @@
                 class="tab" data-tab="map" style="text-decoration: none;">지도</a>
                 <div class="tab active">전체일기</div>
                </div>
+               <!-- map container shown when Map tab selected
+               <div id="mapContainer" style="display:none; margin-top:12px;">
+                 <div id="map" style="height:500px; border-radius:12px;"></div>
+                 <a href="Snaplog_map.html">
+                   <button>로그 검색하기</button>
+                 </a>
+               </div> -->
             </div>
           </div>
         </section>
@@ -159,7 +169,7 @@
   }
 
   const state = {
-    entries: [],
+    entries: loadLS('entries', []),
     theme: loadLS('theme','light'),
     cal: new Date(),
     filtered: [],
@@ -224,7 +234,7 @@
   function renderRecent(){
     const box = $('#recent'); if(!box) return;
     box.innerHTML='';
-    const arr = state.entries.slice().sort((a,b)=>(b.tn||0)-(a.tn||0)).slice(0,50);
+    const arr = state.entries.slice().reverse().slice(0,50);
     if(arr.length===0){ box.innerHTML = '<div class="small">최근 기록이 없습니다.</div>'; return; }
     arr.forEach(e=>{
       const it=document.createElement('div'); it.className='item';
@@ -345,35 +355,16 @@
   $('#prevM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1,1); renderCalendar(); });
   $('#nextM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1,1); renderCalendar(); });
 
-  // ✅ IndexedDB에서 데이터 로드
-  async function loadEntries(){
-    try{
-      state.entries = await getAllFromIDB();
-      state.entries = state.entries.map(e=>{
-        if(e && e.date){
-          const {y,m,d} = parseYMD(e.date);
-          if(y && m && d) e.date = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        }
-        return e;
-      });
-      state.filtered = state.entries.slice().sort((a,b)=> (b.ts||0)-(a.ts||0));
-      state.page=1;
-      applyFiltersAndRender();
-      console.log('✅ IndexedDB에서 데이터 로드 완료:', state.entries.length, '개');
-    }catch(e){
-      console.error('❌ IndexedDB 로드 실패:', e);
-      alert('데이터를 불러오는데 실패했습니다.');
+  state.entries = loadLS('entries', []).map(e=>{
+    if(e && e.date){
+      const {y,m,d} = parseYMD(e.date);
+      if(y && m && d) e.date = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     }
-  }
-
-  // ✅ 다른 탭에서 저장 이벤트 감지
-  window.addEventListener('entrySaved', ()=>{
-    console.log('🔄 다른 탭에서 저장됨 - 새로고침');
-    loadEntries();
+    return e;
   });
-
-  // ✅ 초기 로드
-  loadEntries();
+  state.filtered = state.entries.slice().sort((a,b)=> (b.ts||0)-(a.ts||0));
+  state.page=1;
+  applyFiltersAndRender();
 
 })();
 </script>
