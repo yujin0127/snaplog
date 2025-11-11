@@ -281,40 +281,86 @@
           }
       }
   
-      function renderRecent() {
-          try {
-          const box = $("#recent");
-          if (!box) return;
-          box.innerHTML = "";
-          state.entries
-              .slice()
-              .reverse()
-              .slice(0, 50)
-              .forEach((e) => {
-              const it = document.createElement("div");
-              it.className = "item";
-              const left = document.createElement("div");
-              left.innerHTML = `<div><strong>${e.title || "제목 없음"}</strong></div><div class="small">${e.date}</div>`;
-              const right = document.createElement("button");
-              right.className = "btn ghost";
-              right.textContent = state.cursor === e.id ? "닫기" : "보기";
-              right.onclick = () => {
-                  if (state.cursor === e.id) {
-                  resetComposer();
-                  renderRecent();
-                  } else {
-                  loadEntry(e.id);
-                  renderRecent();
-                  }
-              };
-              it.append(left, right);
-              box.appendChild(it);
-              });
-          } catch (e) {
-          console.warn("renderRecent error", e);
-          }
-      }
+      // function renderRecent() {
+      //     try {
+      //     const box = $("#recent");
+      //     if (!box) return;
+      //     box.innerHTML = "";
+      //     state.entries
+      //         .slice()
+      //         .reverse()
+      //         .slice(0, 50)
+      //         .forEach((e) => {
+      //         const it = document.createElement("div");
+      //         it.className = "item";
+      //         const left = document.createElement("div");
+      //         left.innerHTML = `<div><strong>${e.title || "제목 없음"}</strong></div><div class="small">${e.date}</div>`;
+      //         const right = document.createElement("button");
+      //         right.className = "btn ghost";
+      //         right.textContent = state.cursor === e.id ? "닫기" : "보기";
+      //         right.onclick = () => {
+      //             if (state.cursor === e.id) {
+      //             resetComposer();
+      //             renderRecent();
+      //             } else {
+      //             loadEntry(e.id);
+      //             renderRecent();
+      //             }
+      //         };
+      //         it.append(left, right);
+      //         box.appendChild(it);
+      //         });
+      //     } catch (e) {
+      //     console.warn("renderRecent error", e);
+      //     }
+      // }
   
+      // 최근 일기 최근 작성/저장된 순
+      function renderRecent() {
+        try {
+            const box = $("#recent");
+            if (!box) return;
+            box.innerHTML = "";
+    
+            // 선택된 날짜 기준 내림차순 정렬
+            // const sortedEntries = state.entries
+            //     .slice()
+            //     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+
+            // 저장된 날짜 기준 내림차순 정렬
+            const sortedEntries = state.entries
+              .slice()
+              .sort((a, b) => (b.tn || 0) - (a.tn || 0)); // 최신 저장 순
+
+            sortedEntries.slice(0, 50).forEach((e) => {
+                const it = document.createElement("div");
+                it.className = "item";
+    
+                const left = document.createElement("div");
+                left.innerHTML = `<div><strong>${e.title || "제목 없음"}</strong></div><div class="small">${e.date}</div>`;
+    
+                const right = document.createElement("button");
+                right.className = "btn ghost";
+                right.textContent = state.cursor === e.id ? "닫기" : "보기";
+                right.onclick = () => {
+                    if (state.cursor === e.id) {
+                        resetComposer();
+                        renderRecent();
+                    } else {
+                        loadEntry(e.id);
+                        renderRecent();
+                    }
+                };
+    
+                it.append(left, right);
+                box.appendChild(it);
+            });
+        } catch (e) {
+            console.warn("renderRecent error", e);
+        }
+    }
+    
+      
       function renderCalendar() {
           try {
           const cal = $("#calendar");
@@ -776,7 +822,8 @@
               photoItems: state.photoItems.slice(0, MAX_UPLOAD),
               repIndex: state.repIndex,
               date: formatDate(state.selectedDate),
-              ts: state.selectedDate.getTime()
+              ts: state.selectedDate.getTime(),
+              tn: Date.now() // ✅ 선택 날짜가 아니라 작성된 현재 시간
           };
   
           await saveEntryToIDB(entry);
