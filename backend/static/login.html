@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snaplog | 로그인</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 60px;
+  background-color: #f4f6f9;
+}
+form {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+h2 { text-align: center; margin-bottom: 20px; }
+input { padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; }
+button {
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+#loginBtn { background-color: #4CAF50; color: white; }
+#signupPageBtn { background-color: #2196F3; color: white; }
+#forgotBtn { background-color: #FF9800; color: white; }
+#message { text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+<form id="loginForm">
+  <h2>로그인</h2>
+  <input type="text" id="username" placeholder="아이디" required />
+  <input type="password" id="password" placeholder="비밀번호" required />
+  <button type="button" id="loginBtn">로그인</button>
+  <button type="button" id="signupPageBtn">회원가입</button>
+  <button type="button" id="forgotBtn">비밀번호 찾기</button>
+  <div id="message"></div>
+</form>
+
+<script>
+const API_BASE = "http://localhost:8000";
+const msgDiv = document.getElementById("message");
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  try {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if(res.ok){
+      window.location.href = "/diary";
+    } else {
+      msgDiv.textContent = data.detail || "로그인 실패";
+      msgDiv.style.color = "red";
+    }
+  } catch(err){
+    msgDiv.textContent = "서버 오류";
+    msgDiv.style.color = "red";
+  }
+});
+
+document.getElementById("signupPageBtn").addEventListener("click", () => {
+  window.location.href = "/static/signup.html";
+});
+
+document.getElementById("forgotBtn").addEventListener("click", () => {
+  alert("비밀번호 찾기 기능은 아직 구현되지 않았습니다.");
+});
+</script>
+</body>
+</html>
