@@ -9,6 +9,8 @@
       "아침","카페","커피","케이크","빵","라면","피자","버거","파스타","스시"
     ];
     const MAX_UPLOAD = 5;
+
+    let toggleAutoModal = () => {};
           
     
       // ================== 유틸 ==================
@@ -169,7 +171,7 @@
       async function callAutoDiaryAPI(images, photosSummary, tone, imagesMeta) {
           if (!API_URL) return null;
           const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort("timeout"), 45000);
+          const t = setTimeout(() => ctrl.abort("timeout"), 90000);
   
           const payload = { tone, images, photosSummary, imagesMeta };
   
@@ -630,6 +632,17 @@
   
       // ================== 초기 바인딩 ==================
       window.addEventListener("DOMContentLoaded", () => {
+          const autoModal = $("#autoModal");
+          const autoModalText = autoModal ? autoModal.querySelector(".modal-text") : null;
+          toggleAutoModal = (show, text) => {
+              if (!autoModal) return;
+              if (text && autoModalText) autoModalText.textContent = text;
+              if (show) {
+                  autoModal.classList.add("active");
+              } else {
+                  autoModal.classList.remove("active");
+              }
+          };
           // 테마
           applyTheme(state.theme);
           const darkToggleApp = $("#darkToggleApp");
@@ -783,33 +796,6 @@
         });
       }
   
-      const autoBtn = $("#autoBtn");
-      if (autoBtn) {
-      autoBtn.addEventListener("click", async () => {
-          if (!state.photoItems || state.photoItems.length === 0) {
-          alert("직접 입력하시거나 사진을 넣어주세요");
-          return;
-          }
-  
-          const images = state.photoItems.slice(0, MAX_UPLOAD).map((p) => p.dataURL);
-          const imagesMeta = state.photoItems.slice(0, MAX_UPLOAD).map((p) => ({ 
-            shotAt: p.shotAt,
-            gps: p.gps 
-          }));
-          const photosSummary = buildPhotosSummary(state);
-          const tone = state.tone || "중립";
-  
-          const api = await callAutoDiaryAPI(images, photosSummary, tone, imagesMeta);
-          if (!api) {
-          return;
-          }
-          const category = classifyCategory(state.tempNames || []);
-          const resultText = api.body || fallbackGenerate(photosSummary, category);
-          const ta = $("#text");
-          if (ta) ta.value = resultText;
-      });
-      }
-  
       $('#saveBtn').addEventListener('click', async ()=>{
           try{
           const body = ($('#text')?.value || '').trim();
@@ -905,4 +891,47 @@
       }
     };
   
+     // 자동생성
+     const autoBtn = $("#autoBtn");
+     if (autoBtn && !autoBtn.dataset.autoBound) {
+       autoBtn.dataset.autoBound = "1";
+       autoBtn.addEventListener("click", async () => {
+         // photoItems 기준으로 진행
+         if (!state.photoItems || state.photoItems.length === 0) {
+           alert("직접 입력하시거나 사진을 넣어주세요");
+           return;
+         }
+ 
+         // 서버로 보낼 데이터 구성
+         const images = state.photoItems
+           .slice(0, MAX_UPLOAD)
+           .map((p) => p.dataURL);
+         const imagesMeta = state.photoItems
+           .slice(0, MAX_UPLOAD)
+           .map((p) => ({ shotAt: p.shotAt }));
+         const photosSummary = buildPhotosSummary(state);
+         const tone = state.tone || "중립";
+ 
+         toggleAutoModal(true, "자동생성 중...");
+         try {
+           const api = await callAutoDiaryAPI(
+             images,
+             photosSummary,
+             tone,
+             imagesMeta
+           );
+           if (!api) {
+             return;
+           }
+           const category = classifyCategory(state.tempNames || []);
+           const resultText =
+             api.body || fallbackGenerate(photosSummary, category);
+           const ta = $("#text");
+           if (ta) ta.value = resultText;
+         } finally {
+           toggleAutoModal(false);
+         }
+       });
+     }
+     
   })(); // ✅ IIFE 닫는 괄호
