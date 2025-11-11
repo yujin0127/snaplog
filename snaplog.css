@@ -173,7 +173,7 @@ html[data-theme="dark"] .calendar .cell.saved{
 /* 지도 필터 컨트롤 */
 .map-filter {
   background: var(--card);
-  padding: 16px;
+  padding: 16px 3%;
   border-radius: 12px;
   margin-bottom: 12px;
   border: 1px solid var(--line);
@@ -269,5 +269,58 @@ html[data-theme="dark"] .calendar .cell.saved{
   .filter-buttons {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* 다크모드 지도 필터 컨트롤 배경 어둡게 */
+html[data-theme="dark"] .map-filter {
+  background: #1c1f2a; /* 기존 var(--card)보다 더 어두운 색 */
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+
+/* 라벨 글자색은 밝게 유지 */
+html[data-theme="dark"] .filter-label {
+  color: #f2f3f5; 
+}
+
+/* 입력창 배경 */
+html[data-theme="dark"] .filter-input {
+  background: #2a2e3d; /* 더 어두운 입력창 */
+  color: #f2f3f5;
+  border: 1px solid var(--line-strong);
+}
+
+/* 입력창 placeholder 색상 */
+html[data-theme="dark"] .filter-input::placeholder {
+  color: #bfc6d2; /* 밝은 회색 */
+}
+
+/* 해시태그 칩 */
+html[data-theme="dark"] .hashtag-chip {
+  background: #3a3f5a; /* 진한 배경 */
+  color: #f2f3f5;
+}
+
+html[data-theme="dark"] .hashtag-chip:hover {
+  background: #5a60a0; /* hover 시 포인트 컬러 */
+  color: #fff;
+}
+
+
+@media (max-width: 900px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-buttons {
+    justify-content: flex-start;
+  }
+  .filter-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .filter-input {
+    flex: 1;
   }
 }

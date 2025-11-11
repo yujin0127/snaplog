@@ -432,20 +432,23 @@
               }
               
               cell.onclick = () => {
-                  state.selectedDate = new Date(cur.getFullYear(), cur.getMonth(), d);
-                  updateSelectedDateDisplay();
-                  
-                  const key = formatDate(state.selectedDate);
-                  const hit = state.entries.find((e) => e.date === key);
-                  if (hit) {
-                      state.cursor = hit.id;
-                  } else {
-                      state.cursor = null;
-                      resetComposer();
-                  }
-                  reflectCurrent();
-                  renderCalendar();
-              };
+                state.selectedDate = new Date(cur.getFullYear(), cur.getMonth(), d);
+                updateSelectedDateDisplay();
+                
+                const key = formatDate(state.selectedDate);
+                const hit = state.entries.find((e) => e.date === key);
+                if (hit) {
+                    state.cursor = hit.id;
+                } else {
+                    state.cursor = null;
+                    resetComposer();
+                }
+                reflectCurrent();
+                renderCalendar();
+                
+                // ✅ 추가: 일기 로드 이벤트 발생
+                window.dispatchEvent(new CustomEvent('entryLoaded'));
+            };
               cal.appendChild(cell);
           }
           } catch (e) {
