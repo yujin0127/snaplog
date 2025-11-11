@@ -94,12 +94,16 @@
        class="tab" data-tab="all-diary" style="text-decoration: none;">전체일기</a>
       </div>
       <!-- map container shown when Map tab selected -->
-      <div id="mapContainer" style="display:none; margin-top:12px;">
-        <div id="map" style="height:500px; border-radius:12px;"></div>
-        <a href="Snaplog_map.html">
-          <button>로그 검색하기</button>
+      <div id="mapContainer" style="display:none; margin-top:12px; position:relative;">
+        <a href="Snaplog_map.html" 
+           style="position:absolute; top:12px; right:12px; z-index:1000; text-decoration:none;">
+          <button class="btn" style="display:flex; align-items:center; gap:4px;">
+            🔍 검색
+          </button>
         </a>
+        <div id="map" style="height:500px; border-radius:12px;"></div>
       </div>
+          
      </section>
     </div>
    </div>
@@ -110,7 +114,7 @@
   <!-- <script src="snaplog2.js"></script> -->
   <script src="snaplog3.js"></script>
   <script src="snaplog_exif.js"></script>
-  <script src="snaplog_tab2.js"></script>
+  <script src="snaplog_tab3.js"></script>
  </body>
 </html>
 

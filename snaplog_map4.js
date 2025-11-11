@@ -391,7 +391,7 @@
 
       // 연도 선택
       const yearSelect = document.createElement('select');
-      yearSelect.style.cssText = 'padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px;';
+      yearSelect.style.cssText = 'margin-left:10px; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px;';
       
       const currentYear = new Date().getFullYear();
       const years = mapState.entries.map(e => {

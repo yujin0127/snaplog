@@ -51,29 +51,23 @@
       <!-- 전체지도 container -->
       <div id="allMapContainer" class="tab-content" style="display:block; margin-top:12px;">
         <!-- 지도 필터 컨트롤 -->
-        <div class="map-filter">
+        <div style="background:#f8f9fa; padding:16px; border-radius:12px; margin-bottom:12px;">
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-            
-            <!-- 기간 div -->
-            <div style="display:flex; gap:8px; align-items:center; flex-basis:100%;">
+            <div style="display:flex; gap:8px; align-items:center;">
               <label style="font-size:14px; font-weight:500;">기간:</label>
               <input type="date" id="mapStartDate" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
               <span style="color:#999;">~</span>
               <input type="date" id="mapEndDate" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
             </div>
-        
-            <!-- 해시태그 div -->
-            <div style="display:flex; gap:8px; align-items:center; flex-basis:100%;">
+            <div style="display:flex; gap:8px; align-items:center;">
               <label style="font-size:14px; font-weight:500;">해시태그:</label>
               <input type="text" id="mapHashtag" placeholder="#여행" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; width:120px;">
-              <!-- 버튼들 -->
-              <button class="btn" id="mapFilterBtn" style="padding:6px 16px; font-size:13px;">필터 적용</button>
-              <button class="btn ghost" id="mapResetBtn" style="padding:6px 16px; font-size:13px; height: 30px;">초기화</button>
             </div>
+            <button class="btn" id="mapFilterBtn" style="padding:6px 16px; font-size:13px;">필터 적용</button>
+            <button class="btn ghost" id="mapResetBtn" style="padding:6px 16px; font-size:13px;">초기화</button>
           </div>
-        
           <div id="mapHashtagList" style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;"></div>
-        </div>        
+        </div>
         <div id="allMap" style="height:500px; border-radius:12px;"></div>
       </div>
       <div class="tabs">
