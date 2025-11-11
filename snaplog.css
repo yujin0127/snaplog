@@ -168,3 +168,106 @@ html[data-theme="dark"] .calendar .cell.saved{
 [data-theme="dark"] #selectedDate {
   color: #a78bfa;
 }
+
+
+/* 지도 필터 컨트롤 */
+.map-filter {
+  background: var(--card);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+}
+
+.filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: fit-content;
+}
+
+.filter-input {
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.filter-input::placeholder {
+  color: var(--muted);
+}
+
+.filter-divider {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.hashtag-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.hashtag-chip {
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.hashtag-chip:hover {
+  transform: scale(1.05);
+  background: var(--accent-2);
+}
+
+@media (max-width: 900px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filter-group {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .filter-input {
+    flex: 1;
+  }
+
+  .filter-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+}
