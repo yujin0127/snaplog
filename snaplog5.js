@@ -347,6 +347,7 @@
                 right.onclick = () => {
                     if (state.cursor === e.id) {
                         resetComposer();
+                        restoreSelectedDateToToday(); // ✅ 닫기 시 선택된 날짜를 오늘로 복귀
                         renderRecent();
                     } else {
                         loadEntry(e.id);
@@ -433,23 +434,14 @@
                   cell.classList.add("selected");
               }
               
-              cell.onclick = () => {
+            cell.onclick = () => {
                 state.selectedDate = new Date(cur.getFullYear(), cur.getMonth(), d);
                 updateSelectedDateDisplay();
-                
-                const key = formatDate(state.selectedDate);
-                const hit = state.entries.find((e) => e.date === key);
-                if (hit) {
-                    state.cursor = hit.id;
-                } else {
-                    state.cursor = null;
-                    resetComposer();
-                }
-                reflectCurrent();
+
+                // ✅ 변경: 날짜를 클릭해도 기존 일기를 불러오지 않고 초기 입력 상태로 유지
+                state.cursor = null;
+                resetComposer();
                 renderCalendar();
-                
-                // ✅ 추가: 일기 로드 이벤트 발생
-                window.dispatchEvent(new CustomEvent('entryLoaded'));
             };
               cal.appendChild(cell);
           }
@@ -570,6 +562,15 @@
           }
       }
   
+    // ✅ 오늘 날짜로 선택 상태를 되돌리는 유틸
+    function restoreSelectedDateToToday() {
+        const today = new Date();
+        state.selectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        state.cal = new Date(today.getFullYear(), today.getMonth(), 1);
+        updateSelectedDateDisplay();
+        renderCalendar();
+    }
+
       function updatePreviewFromView() {
           const img = $("#preview");
           const ph = $("#previewWrap .ph");
