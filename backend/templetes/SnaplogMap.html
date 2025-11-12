@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1" name="viewport"/>
   <title>스냅로그 | Snaplog</title>
-  <link rel="stylesheet" href="snaplog.css">
+  <link rel="stylesheet" href="/backend/static/snaplog.css">
   <!-- 추가: EXIF 파서 -->
   <script src="https://unpkg.com/exifr/dist/exifr.min.js"></script>
   <!-- Leaflet + MarkerCluster -->
@@ -77,12 +77,12 @@
         <div id="allMap" style="height:500px; border-radius:12px;"></div>
       </div>
       <div class="tabs">
-        <a href="Snaplog_test4+map.html" 
+        <a href="/backend/templetes/SnaplogMain.html" 
         class="tab" data-tab="diary" style="text-decoration: none;">
           일기
         </a>
        <div class="tab active" data-tab="map">지도</div>
-       <a href="Snaplog_allDiaries.html" 
+       <a href="/backend/templetes/Snaplog_allDiaries.html" 
        class="tab" data-tab="all-diary" style="text-decoration: none;">전체일기</a>
       </div>
      </section>
@@ -92,8 +92,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-  <!-- <script src="snaplog2.js"></script> -->
-  <script src="snaplog4.js"></script>
-  <script src="snaplog_map4.js"></script>
+  <script src="/backend/static/snaplogMap.js"></script>
+  <script src="/backend/static/snaplogMapMain.js"></script>
 </body>
 </html>
