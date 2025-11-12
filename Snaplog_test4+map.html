@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="ko">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <title>스냅로그 | Snaplog</title>
+  <link rel="stylesheet" href="snaplog.css">
+  <!-- 추가: EXIF 파서 -->
+  <script src="https://unpkg.com/exifr/dist/exifr.min.js"></script>
+  <!-- Leaflet + MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+ </head>
+ <body>
+  <div class="bg">
+   <!-- Intro -->
+   <div class="panel" id="intro">
+    <div class="intro" style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+     <div class="hero">스냅로그</div>
+     <div class="sub">사진으로 남기는 오늘의 순간</div>
+     <div class="cta">
+      <button class="btn" id="startBtn" type="button">시작하기</button>
+     </div>
+    </div>
+   </div>
+   <!-- App -->
+   <div class="panel" id="app" style="display:none">
+    <div class="topbar">
+     <div class="brand">스냅로그</div>
+     <span class="badge" id="statAll">전체 0</span>
+     <span class="badge" id="statMonth">이번 달 0</span>
+     <span class="badge" id="statPhotos">사진 0</span>
+     <div class="spacer"></div>
+     <div class="toggle" title="다크모드">
+      <span aria-hidden="true" class="label">다크모드</span>
+      <label class="switch">
+       <input id="darkToggleApp" type="checkbox"/>
+       <span class="slider"></span>
+      </label>
+     </div>
+    </div>
+    <div class="layout" id="layout" style="display:grid">
+     <aside class="card">
+      <div class="section-title">달력</div>
+      <div class="row small" style="margin-bottom:6px; display:flex; gap:6px; align-items:center;">
+       <button class="btn ghost" id="prevM" type="button">◀︎</button>
+       <div id="ym"></div>
+       <button class="btn ghost" id="nextM" type="button">▶︎</button>
+      </div>
+      <div class="calendar" id="calendar"></div>
+      <hr style="opacity:.6; margin:12px 0"/>
+      <div class="section-title">최근 기록</div>
+      <div class="list small" id="recent"></div>
+     </aside>
+     <section class="card">
+      <div class="section-title">오늘의 기록</div>
+      <div class="tools">
+       <label class="btn input-file daily_button">
+        사진 업로드
+        <input accept="image/*" id="file" multiple type="file"/>
+       </label>
+       <button class="btn daily_button" id="autoBtn" type="button">자동 생성</button>
+       <button class="btn daily_button" id="saveBtn" type="button">저장</button>
+       <button class="btn ghost daily_button" id="delBtn" type="button">삭제</button>
+      </div>
+      <div style="margin-top:10px; position:relative">
+       <div class="preview-wrap" id="previewWrap">
+        <span class="ph">미리보기</span>
+        <img alt="미리보기" class="preview" id="preview"/>
+        <button class="nav-arrow" id="navPrev" type="button">‹</button>
+        <button class="nav-arrow" id="navNext" type="button">›</button>
+       </div>
+       <div class="gallery" id="galleryBar">
+        <div class="camera-tile" id="cameraTile">
+         <div class="cam-icon">📷</div>
+         <div class="cam-count"><span id="camCount">0</span>/5</div>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+       </div>
+      </div>
+      <div class="editor">
+       <input class="titlebox" id="title" maxlength="20" placeholder="제목(최대 20자)" type="text"/>
+      </div>
+      <div class="editor">
+       <textarea class="textbox" id="text" placeholder="자동으로 생성되거나 직접 적을 수 있음"></textarea>
+      </div>
+      <div class="tabs">
+       <div class="tab active">일기</div>
+       <div class="tab">지도</div>
+       <a href="Snaplog_allDiaries.html" 
+       class="tab" data-tab="all-diary" style="text-decoration: none;">전체일기</a>
+      </div>
+      <!-- map container shown when Map tab selected -->
+      <div id="mapContainer" style="display:none; margin-top:12px; position:relative;">
+        <a href="Snaplog_map.html" 
+           style="position:absolute; top:12px; right:12px; z-index:1000; text-decoration:none;">
+          <button class="btn" style="display:flex; align-items:center; gap:4px;">
+            🔍 검색
+          </button>
+        </a>
+        <div id="map" style="height:500px; border-radius:12px;"></div>
+      </div>
+          
+     </section>
+    </div>
+   </div>
+  </div>
+  <div class="modal-backdrop" id="autoModal">
+   <div class="modal-card">
+    <div class="modal-spinner"></div>
+    <div class="modal-text">자동생성 중...</div>
+   </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  
+  <script src="snaplog5.js"></script>
+  <script src="snaplog_exif.js"></script>
+  <script src="snaplog_tab3.js"></script>
+ </body>
+</html>
+
