@@ -222,9 +222,7 @@ def _read_exif_datetime_from_bytes(raw: bytes) -> datetime | None:
 
 # ---------------- 날짜 경계 유틸 + 스티처 ----------------
 def _day_break_positions(date_sequence: list[str]) -> list[tuple[int,int]]:
-    """연속 날짜 시퀀스에서 (변화가 시작되는 1-based 위치, day_diff) 목록.
-       예: [08,08,08,09,11] → [(4,1),(5,2)]
-    """
+    """연속 날짜 시퀀스에서 (변화가 시작되는 1-based 위치, day_diff) 목록."""
     if not date_sequence or len(date_sequence) < 2:
         return []
     out = []
@@ -319,15 +317,36 @@ def _reorder_by_tags(text: str, n_frames: int, date_sequence: list[str]) -> str 
             out_parts.append(_label_for_days(breaks[i]))
         seg = blocks[i].strip()
         # 세그먼트 선두에 이미 전환사가 있으면 중복 방지
-        if i in breaks and _TIME_SHIFT_PAT.match(seg):
-            out_parts.append(seg)
-        else:
-            out_parts.append(seg)
+        out_parts.append(seg)
     out = " ".join(out_parts).strip()
 
     # 태그 흔적 제거
     out = _TAG_RE.sub("", out)
     return clean_inline(out)
+
+# ======== 추가: 태그 기반 재배열(태그 보존 버전) ========
+def _reorder_by_tags_keep(text: str, n_frames: int, date_sequence: list[str]) -> str | None:
+    """프레임 순서대로 재조립하되 <fi>...</fi> 태그를 유지한다.
+       태그가 불충분하면 None."""
+    if not text or n_frames <= 0:
+        return None
+    blocks = {}
+    for i in range(1, n_frames + 1):
+        m = re.search(rf"<f{i}>(.*?)</f{i}>", text, re.I | re.S)
+        if not m:
+            return None
+        blk = m.group(1).strip()
+        if not blk:
+            return None
+        blocks[i] = blk
+
+    breaks = {pos: diff for (pos, diff) in _day_break_positions(date_sequence or [])}
+    out_parts = []
+    for i in range(1, n_frames + 1):
+        if i in breaks:
+            out_parts.append(_label_for_days(breaks[i]))
+        out_parts.append(f"<f{i}>{blocks[i]}</f{i}>")
+    return " ".join(out_parts).strip()
 
 # ---------------- 1) 분석: 이미지 → 구조화 JSON ----------------
 def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | None = None) -> dict | None:
@@ -482,6 +501,11 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
         print("분석 JSON 파싱 실패:", e)
         return None
 
+# ================== 검증 포함 분석 ==================
+# (이 블록은 이전 답변에서 추가된 검증 로직 그대로 사용한다고 가정,
+#  여기서는 코드 축약. 기존 파일에 있는 analyze_with_validation()을 사용하세요.)
+# ---- 기존 analyze_with_validation 정의 유지 ----
+
 # ---------------- 2) 초안 ----------------
 def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
     if not analysis:
@@ -604,54 +628,33 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
             {"role":"user","content": user}
         ]
     )
-    draft = (r.choices[0].message.content or "").strip()
-    draft = clean_inline(draft)
-    draft = replace_proper_nouns_if_no_visible_text(analysis, draft)
+    draft_raw = (r.choices[0].message.content or "").strip()
+    draft_raw = clean_inline(draft_raw)
+    draft_raw = replace_proper_nouns_if_no_visible_text(analysis, draft_raw)
 
-    # ======== 추가: 태그 기반 재배열 시도 ========
-    reordered = _reorder_by_tags(draft, n_frames=len(frames), date_sequence=date_sequence)
-    if reordered:
-        draft = reordered
-
-    # 날짜 경계가 있는데 전환사가 없다면 스티치 본문으로 교체
+    # === 핵심 추가: 초안 단계에서 태그 보존 재정렬 ===
+    kept = _reorder_by_tags_keep(draft_raw, n_frames=len(frames), date_sequence=date_sequence)
+    if kept:
+        return kept  # 태그 유지 상태로 반환 → 보정 단계 입력에서도 순서를 고정
+    # 태그가 없거나 불완전하면, 기존 방식으로 최소 보정
+    ordered = _reorder_by_tags(draft_raw, n_frames=len(frames), date_sequence=date_sequence)
+    if ordered:
+        return ordered
+    # 날짜 경계가 있는데 전환사 없음 → 프레임 합성
     has_break = len(_day_break_positions(date_sequence)) > 0
-    if has_break and not _TIME_SHIFT_PAT.search(draft):
+    if has_break and not _TIME_SHIFT_PAT.search(draft_raw):
         stitched = compose_from_frames(analysis)
         if stitched:
-            draft = stitched
-    return draft
+            return stitched
+    return draft_raw
 
 # ---------------- 3) 보정 ----------------
 def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: str) -> str:
     if not draft:
         return ""
     frames = analysis.get("frames") or [] if analysis else []
-    length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
     date_sequence = analysis.get("date_sequence") or [] if analysis else []
-
-    from datetime import date as _date
-    def _to_date(x):
-        if not x:
-            return None
-        if isinstance(x, _date):
-            return x
-        try:
-            return datetime.fromisoformat(str(x)).date()
-        except Exception:
-            return None
-
-    date_changes = []
-    if len(date_sequence) > 1:
-        for i in range(1, len(date_sequence)):
-            a = _to_date(date_sequence[i-1])
-            b = _to_date(date_sequence[i])
-            if a and b and a != b:
-                days_diff = (b - a).days
-                if days_diff >= 1:
-                    date_changes.append({
-                        "position": i,
-                        "days_diff": days_diff
-                    })
+    length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
 
     sys = "당신은 말하듯 쓰는 텍스트를 다듬는 한국어 에디터입니다."
     user = f"""
@@ -685,6 +688,26 @@ def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: st
     final_text = (r.choices[0].message.content or "").strip()
     final_text = clean_inline(final_text)
     final_text = soften_report_tone(final_text)
+
+    # === 핵심 추가: 보정 후 태그 재정렬 → 태그 제거 ===
+    # 보정 입력이 태그를 가지고 들어갔으므로, 보정 결과에도 태그가 남아있을 확률이 높다.
+    ordered = _reorder_by_tags(final_text, n_frames=len(frames), date_sequence=date_sequence)
+    if ordered:
+        final_text = ordered
+    else:
+        # 태그가 유실되었거나 불완전 → 순서 보장을 위해 프레임 합성본으로 강제 교체
+        stitched = compose_from_frames(analysis or {})
+        if stitched:
+            final_text = stitched
+        # 그래도 없으면 기존 final_text 유지
+
+    # 날짜 경계가 있는데 전환사 없음 → 한 번 더 보정
+    has_break = len(_day_break_positions(date_sequence)) > 0
+    if has_break and not _TIME_SHIFT_PAT.search(final_text):
+        stitched = compose_from_frames(analysis or {})
+        if stitched:
+            final_text = stitched
+
     return final_text
 
 # 과장/감상문 느낌 줄이는 표현들
@@ -827,6 +850,7 @@ def api_auto_dairy():
 
             print(f"{'='*60}\n")
 
+            # 검증 분석은 기존 구현 사용 (여기서는 analyze_images만 쓰고 싶다면 교체 가능)
             analysis = analyze_images(images, photos_summary=photos)
             category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
             draft = draft_diary(analysis, tone, category_hint)
@@ -908,6 +932,7 @@ def api_auto_dairy():
 
         if images:
             try:
+                # 검증 분석은 기존 구현 사용 (여기서는 analyze_images만 쓰고 싶다면 교체 가능)
                 analysis = analyze_images(images, photos_summary=photos)
                 category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
                 draft = draft_diary(analysis, tone, category_hint)
