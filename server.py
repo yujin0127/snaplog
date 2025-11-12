@@ -1,4 +1,4 @@
-"""Snaplog server – 3단계(분석→초안→보정)로 20~30대 자연체 일기 생성"""
+"""Snaplog server – 3단계(분석→초안→보정) + 교차검증(모델 이중생성)"""
 
 from __future__ import annotations
 import os, re, json, random, traceback, time, io, base64, uuid
@@ -23,8 +23,12 @@ if not API_KEY:
     raise RuntimeError('OPENAI_API_KEY 환경변수가 없습니다. Windows: setx OPENAI_API_KEY "sk-..."')
 
 client = OpenAI(api_key=API_KEY)
-MODEL_VISION = "gpt-4o-mini"
-MODEL_TEXT   = "gpt-4o-mini"
+
+# 모델 설정
+MODEL_VISION = "gpt-4o-mini"   # 이미지 분석
+MODEL_TEXT   = "gpt-4o-mini"   # 초안 1차
+ALT_TEXT_MODEL = os.getenv("OPENAI_ALT_TEXT_MODEL", "gpt-4o")  # 초안 2차(동일 프롬포트)
+
 MAX_IMAGES   = 10
 THROTTLE_SECONDS = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0.5"))
 MAX_WAIT_SECONDS = float(os.getenv("OPENAI_MAX_WAIT_SECONDS", "30"))
@@ -222,13 +226,9 @@ def _read_exif_datetime_from_bytes(raw: bytes) -> datetime | None:
 
 # ---------------- 날짜 경계 유틸 + 스티처 ----------------
 def _day_break_positions(date_sequence: list[str]) -> list[tuple[int,int]]:
-    """연속 날짜 시퀀스에서 (변화가 시작되는 1-based 위치, day_diff) 목록.
-       예: [08,08,08,09,11] → [(4,1),(5,2)]
-    """
     if not date_sequence or len(date_sequence) < 2:
         return []
     out = []
-    from datetime import date as _date
     def _to_date(x):
         try:
             return datetime.fromisoformat(str(x)).date()
@@ -241,91 +241,63 @@ def _day_break_positions(date_sequence: list[str]) -> list[tuple[int,int]]:
     return out
 
 def _label_for_days(diff: int) -> str:
-    if diff <= 0:
-        return ""
-    if diff == 1:
-        return "다음 날, "
-    if diff == 2:
-        return "이틀 뒤, "
-    if diff == 3:
-        return "사흘 뒤, "
+    if diff <= 0: return ""
+    if diff == 1: return "다음 날, "
+    if diff == 2: return "이틀 뒤, "
+    if diff == 3: return "사흘 뒤, "
     return f"{diff}일 뒤, "
 
 def compose_from_frames(analysis: dict) -> str:
-    """프레임 순서를 강제 반영. 날짜 경계에 안전 전환사 삽입."""
     frames = (analysis or {}).get("frames") or []
     if not frames:
         return ""
     breaks = {pos: diff for (pos, diff) in _day_break_positions((analysis or {}).get("date_sequence") or [])}
-
     pieces = []
     for idx, f in enumerate(frames, start=1):
         if idx in breaks:
             pieces.append(_label_for_days(breaks[idx]))
-
         s = (f.get("summary") or "").strip()
         io = f.get("indoor_outdoor") or ""
         ph = f.get("place_hint") or ""
-
         frag = []
-        if ph:
-            frag.append(f"{ph}에서")
-        if s:
-            frag.append(s)
+        if ph: frag.append(f"{ph}에서")
+        if s: frag.append(s)
         else:
-            if io == "indoor":
-                frag.append("실내 장면을 잠시 살폈다")
-            elif io == "outdoor":
-                frag.append("바깥 장면을 잠시 바라봤다")
-            else:
-                frag.append("장면을 잠시 바라봤다")
-
+            if io == "indoor": frag.append("실내 장면을 잠시 살폈다")
+            elif io == "outdoor": frag.append("바깥 장면을 잠시 바라봤다")
+            else: frag.append("장면을 잠시 바라봤다")
         sent = " ".join(x for x in frag if x).strip()
-        if not sent.endswith("."):
-            sent += "."
+        if not sent.endswith("."): sent += "."
         pieces.append(sent)
-
     text = " ".join(pieces)
     return clean_inline(soften_report_tone(text))
 
 _TIME_SHIFT_PAT = re.compile(r"(다음\s*날|이틀\s*뒤|사흘\s*뒤|\d+\s*일\s*뒤|며칠\s*후)", re.I)
 
-# ======== 추가: 태그 기반 재배열 보정기 ========
+# ======== 태그 기반 재배열 보정기 ========
 _TAG_RE = re.compile(r"</?f(\d+)>", re.I)
 
 def _reorder_by_tags(text: str, n_frames: int, date_sequence: list[str]) -> str | None:
-    """<f1>..</f1> ~ <fN>..</fN> 태그가 있을 때 프레임 순서대로 재조립하고
-       날짜 경계에 전환사를 삽입. 태그는 제거한다.
-       태그가 불충분하면 None 반환."""
     if not text or n_frames <= 0:
         return None
-    # 태그 블록 추출
     blocks = {}
     for i in range(1, n_frames + 1):
         m = re.search(rf"<f{i}>(.*?)</f{i}>", text, re.I | re.S)
-        if not m:
-            return None
+        if not m: return None
         blk = m.group(1).strip()
-        if not blk:
-            return None
+        if not blk: return None
         blocks[i] = blk
-
-    # 날짜 경계 계산
     breaks = {pos: diff for (pos, diff) in _day_break_positions(date_sequence or [])}
-
     out_parts = []
     for i in range(1, n_frames + 1):
         if i in breaks:
             out_parts.append(_label_for_days(breaks[i]))
         seg = blocks[i].strip()
-        # 세그먼트 선두에 이미 전환사가 있으면 중복 방지
         if i in breaks and _TIME_SHIFT_PAT.match(seg):
             out_parts.append(seg)
         else:
             out_parts.append(seg)
     out = " ".join(out_parts).strip()
-
-    # 태그 흔적 제거
     out = _TAG_RE.sub("", out)
     return clean_inline(out)
 
@@ -336,59 +308,40 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
 
     images_with_time = []
     ordering_debug = []
-    
     for idx, img in enumerate(images[:MAX_IMAGES]):
         img_data = None
         dt = None
         src = "unknown"
-        
+
         if isinstance(img, dict):
             img_data = img.get("data") or img.get("url") or ""
-
-            # 1순위: 이미 주입된 시간
             cand_img_keys = ["order_ts", "shotAt", "takenAt", "timestamp", "time", "fileCreatedAt"]
             client_ts = next((img.get(k) for k in cand_img_keys if img.get(k) is not None), None)
             if client_ts is not None:
                 dt = _parse_any_dt(client_ts)
-                if dt:
-                    src = "pre_extracted"
-            
-            # 2순위: 파일명
+                if dt: src = "pre_extracted"
             if dt is None:
                 name = img.get("filename") or img.get("name") or img.get("originalName") or ""
                 dt_name = _dt_from_filename(name)
                 if dt_name:
-                    dt = dt_name
-                    src = "filename"
+                    dt = dt_name; src = "filename"
         else:
             img_data = img
-        
-        # 3순위: photosSummary
+
         if dt is None and photos_summary and idx < len(photos_summary):
             ps = photos_summary[idx] or {}
-            cand_ps_keys = [
-                "time", "takenAt", "timestamp", "fileCreatedAt",
-                "createdAt", "created_at",
-                "sentAt", "sent_at",
-                "messageTime", "message_time",
-                "kakaoTime", "kakao_time"
-            ]
+            cand_ps_keys = ["time","takenAt","timestamp","fileCreatedAt","createdAt","created_at","sentAt","sent_at","messageTime","message_time","kakaoTime","kakao_time"]
             ps_time = next((ps.get(k) for k in cand_ps_keys if ps.get(k)), None)
             if ps_time:
                 dt_ps = _parse_any_dt(ps_time)
-                if dt_ps:
-                    dt = dt_ps
-                    src = "photosSummary"
-        
-        # 4순위: data URL EXIF
+                if dt_ps: dt = dt_ps; src = "photosSummary"
+
         if dt is None and isinstance(img_data, str) and img_data and img_data.startswith("data:image"):
             try:
                 image_data = img_data.split(",")[1] if "," in img_data else img_data
                 img_bytes = base64.b64decode(image_data)
                 dt_exif = _read_exif_datetime_from_bytes(img_bytes)
-                if dt_exif:
-                    dt = dt_exif
-                    src = "exif_fallback"
+                if dt_exif: dt = dt_exif; src = "exif_fallback"
             except Exception as e:
                 print(f"[{idx}] data URL EXIF 추출 실패: {e}")
 
@@ -398,20 +351,14 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
             "datetime": dt,
             "date_iso": dt.date().isoformat() if dt else ""
         })
-        ordering_debug.append({
-            "i": idx,
-            "source": src,
-            "parsed": dt.isoformat() if dt else ""
-        })
+        ordering_debug.append({"i": idx, "source": src, "parsed": dt.isoformat() if dt else ""})
         print(f"[analyze_images] idx={idx}, source={src}, dt={dt.isoformat() if dt else 'None'}")
 
-    # 시간순 정렬
     images_with_time.sort(key=lambda x: (
         x["datetime"] is None,
         x["datetime"] if x["datetime"] else datetime.max,
         x["original_index"]
     ))
-
     sorted_images = [item["data"] for item in images_with_time]
     date_info_iso = [item["date_iso"] for item in images_with_time]
 
@@ -465,16 +412,11 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
     try:
         data = json.loads(r.choices[0].message.content or "{}")
         frames = data.get("frames") or []
-
-        # index를 정렬된 입력 순서대로 강제
         for i, f in enumerate(frames, 1):
             f["index"] = i
-
-        # 안전 정리
         for f in frames:
             f["summary"] = clean_inline(f.get("summary",""))
             f["elements"] = [clean_inline(x) for x in (f.get("elements") or []) if x]
-
         data["date_sequence"] = date_info_iso
         data["ordering_debug"] = ordering_debug
         return data
@@ -483,71 +425,53 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
         return None
 
 # ---------------- 2) 초안 ----------------
-def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
+def draft_diary(analysis: dict | None, tone: str, category_hint: str, text_model: str = MODEL_TEXT) -> str:
+    """
+    핵심: 설명문이 아니라 '말하듯' 쓰기. 짧고 긴 문장 섞기.
+    '~있었다' 반복 줄이고, 행동/감각을 섞어서 20~30대 일기 톤.
+    """
     if not analysis:
         return ""
     frames = analysis.get("frames") or []
     global_info = analysis.get("global") or {}
     date_sequence = analysis.get("date_sequence") or []
 
-    from datetime import date as _date
     def _to_date(x):
-        if not x:
-            return None
-        if isinstance(x, _date):
-            return x
-        try:
-            return datetime.fromisoformat(str(x)).date()
-        except Exception:
-            return None
+        try: return datetime.fromisoformat(str(x)).date()
+        except Exception: return None
 
     date_changes = []
     if len(date_sequence) > 1:
         for i in range(1, len(date_sequence)):
-            a = _to_date(date_sequence[i-1])
-            b = _to_date(date_sequence[i])
+            a = _to_date(date_sequence[i-1]); b = _to_date(date_sequence[i])
             if a and b and a != b:
                 days_diff = (b - a).days
                 if days_diff >= 1:
-                    date_changes.append({
-                        "position": i + 1,
-                        "days_diff": days_diff
-                    })
-    
+                    date_changes.append({"position": i + 1, "days_diff": days_diff})
+
     date_context = ""
     if date_changes:
         date_context = "\n[시간 흐름 정보]\n"
         for dc in date_changes:
-            if dc["days_diff"] == 1:
-                date_context += f"- {dc['position']}번 사진부터: 다음 날\n"
-            elif dc["days_diff"] == 2:
-                date_context += f"- {dc['position']}번 사진부터: 이틀 뒤\n"
-            elif dc["days_diff"] == 3:
-                date_context += f"- {dc['position']}번 사진부터: 사흘 뒤\n"
-            else:
-                date_context += f"- {dc['position']}번 사진부터: {dc['days_diff']}일 뒤\n"
+            if dc["days_diff"] == 1: date_context += f"- {dc['position']}번 사진부터: 다음 날\n"
+            elif dc["days_diff"] == 2: date_context += f"- {dc['position']}번 사진부터: 이틀 뒤\n"
+            elif dc["days_diff"] == 3: date_context += f"- {dc['position']}번 사진부터: 사흘 뒤\n"
+            else: date_context += f"- {dc['position']}번 사진부터: {dc['days_diff']}일 뒤\n"
 
     bullets = []
     for f in frames:
-        idx = f.get("index")
-        s   = f.get("summary","")
-        io  = f.get("indoor_outdoor","")
-        tm  = f.get("time_hint","")
-        ph  = f.get("place_hint","")
-        flow= f.get("flow","")
+        idx = f.get("index"); s = f.get("summary",""); io = f.get("indoor_outdoor",""); tm = f.get("time_hint",""); ph = f.get("place_hint",""); flow= f.get("flow","")
         parts = []
         if s: parts.append(s)
         if io and io!="unknown": parts.append(f"({io})")
         if tm and tm!="불명": parts.append(f"[{tm}]")
         if ph: parts.append(f"#{ph}")
         if flow and flow!="불명": parts.append(f"{{{flow}}}")
-        if parts:
-            bullets.append(f"- {idx}번: " + " ".join(parts))
+        if parts: bullets.append(f"- {idx}번: " + " ".join(parts))
 
     dom_time = global_info.get("dominant_time","불명")
     movement = global_info.get("movement","불명")
     header = f"[흐름] 시각:{dom_time} 이동:{movement}"
-
     length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
 
     sys = (
@@ -568,26 +492,42 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
 - 과거형 유지. 1인칭 체험이 드러나되 '나는' 생략.
 - 문장 수: {length_rule}. 짧은 문장 1—2개 포함.
 - **중요**: 시간 흐름 정보에 날짜 변화가 명시되어 있으면, 해당 위치에서 **반드시** '다음 날', '이틀 뒤', '사흘 뒤', 'N일 뒤' 등으로 날짜 전환을 표시.
+
 [절제 규칙]
-- 감각 2개 이하. 직접 감정 1문장 이하. 나머지는 행동으로 암시.
-- 의성어·과장 표현 금지.
+- 감각 언급은 최대 2개. 미각·후각 중 1개 + 온도·촉각 중 1개만 허용.
+- 감정 문장 최대 1개. '기뻤다/즐거웠다/특별했다/괜히' 등 직접 감정어 금지. 행동으로 암시.
+- 의성어·과장 표현 금지: 지글지글/바삭/촉촉/입안 가득/코끝/스며들다/감돌다/간질이다/한껏/가득/벅차다/특별했다/미소가 지어졌다.
 - 비유 금지. 수식어는 짧게.
 
 [경험 중심]
-- 장면 나열 금지. 각 문장은 행동 중심.
-- 시각 외 감각 1~2개만 보조로.
-- 원인과 행동으로 감정을 암시.
+- 단순히 장면을 묘사하지 말고, 그 **순간의 경험과 행동**을 중심으로 써주세요.
+- '나는' 같은 주어를 직접 쓰지 않아도, 주체의 **행동**이 자연스럽게 드러나야 합니다.
+- 시각적 묘사만 나열하지 말고, **후각·식감·촉각·온도감·질감** 같은 보조 감각을 섞으세요.
+- 그러나 주요 감각(청각, 미각) 한 두개만 남기고 나머지는 암시로 처리해야 합니다.
+- 감정이 드러날 때는 **왜 그런 감정이 생겼는지** 구체적인 이유를 함께 표현하세요.
+- 그리고 감정을 결과로 두지 말고, 행위나 침묵으로 암시를 하도록 합니다.
+- 문장 리듬이 단조로워지지 않도록 **짧은 문장과 묘사 문장**을 교차해 변주하세요.
+- 한 두 문장은 짧게 끊고, 중간에 호흡을 만들어 줘야 합니다.
 
 [사실 일치]
-- 고유명사는 보일 때만.
-- 메타표현·날짜·파일명 금지.
-- 사람이 보이지 않으면 군중 묘사 금지.
+- 음식·장소 **고유명사**는 보일 때만 사용.
+- **보이지 않으면 절대 추측하거나 대체 이름을 만들지 말 것.** 
+- 한식 반찬류는 '반찬', 단품 요리는 '요리' 정도로만 표현.
+- 사람이 보이지 않으면 군중 묘사 금지. 소리·냄새 생성 금지.
 
-[작성 규칙 – 20~30대 자연체]
-- 모든 문장은 과거형.
-- '**프레임 순서 유지**'는 필수. 날짜 전환 문구는 누락하지 말 것.
+[작성 규칙 — 20~30대 자연체]
+- 첫 문장은 고정되어있지 않다. 맥락과 감각을 순서로 배치한다.
+- 모든 문장은 **과거형**으로 통일. 중요함. 
+- **관찰보다 체험을 우선** 설명. 그러나 '나는'과 같은 주어를 드러내는 표현은 금지.
+- 말하듯 써라. 보고/하고/느낀 것을 직접 행위 중심 문장으로 바꿔가며 짧고 긴 문장 섞어 표현.
+- '~있었다'만 반복하지 말고, '남아 있었다/눈에 들어왔다/한참 봤다/꺼냈다/잠깐 고민했다'처럼 변주하라.
+- 감정은 직접 말하기보다 '조금/잠깐/괜히' 같은 부사로 은은히. 
+- 음식 사진의 감각은 구체적 감각으로 암시. 그리고 감정은 있으나 원인과 연결되어야 한다.
+- 메타표현(사진/이미지/촬영 등) 금지, 파일명/날짜 금지.
+- 성별·인원수 추정 금지, 관계/거리감은 간접적으로.
+- 너무 길어지지 않게 문장의 리듬을 다양하게 사용해야 함. 짧은 문장과 묘사 중심 문장을 교차시켜야 함. 감정의 고저가 느껴져야 한다.
 - {length_rule} 준수.
-- 톤: {tone or "중립"}.
+- 톤: {tone or "중립"} (과장 금지, 담백하게).
 
 [출력 서식 강화]
 - 프레임 i에 대응하는 문장은 반드시 <f{i}>로 시작해 </f{i}>로 끝냅니다.
@@ -595,7 +535,7 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
 - 태그는 출력에만 쓰이며 최종 결과에서 제거됩니다.
 """
     r = throttled_chat_completion(
-        model=MODEL_TEXT,
+        model=text_model,
         temperature=0.15,
         top_p=0.8,
         max_tokens=600,
@@ -608,7 +548,7 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
     draft = clean_inline(draft)
     draft = replace_proper_nouns_if_no_visible_text(analysis, draft)
 
-    # ======== 추가: 태그 기반 재배열 시도 ========
+    # 태그 기반 재배열 시도
     reordered = _reorder_by_tags(draft, n_frames=len(frames), date_sequence=date_sequence)
     if reordered:
         draft = reordered
@@ -621,37 +561,43 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str) -> str:
             draft = stitched
     return draft
 
+# ----------- 교차검증: 동일 프롬포트, 다른 모델 -----------
+def _norm(x: str) -> str:
+    return re.sub(r"\s+", " ", (x or "").strip())
+
+def select_draft_via_cross_validation(analysis: dict, tone: str, category_hint: str) -> tuple[str, dict]:
+    primary = draft_diary(analysis, tone, category_hint, text_model=MODEL_TEXT)
+    used = "primary"
+    alt = None
+    debug = {"primary_len": len(primary), "alt_len": 0, "used": used, "same": None, "primary_model": MODEL_TEXT, "alt_model": ALT_TEXT_MODEL}
+
+    # ALT가 기본과 다를 때만 수행
+    if ALT_TEXT_MODEL and ALT_TEXT_MODEL != MODEL_TEXT:
+        try:
+            alt = draft_diary(analysis, tone, category_hint, text_model=ALT_TEXT_MODEL)
+            debug["alt_len"] = len(alt)
+            if _norm(alt) == _norm(primary):
+                debug["same"] = True
+                used = "primary"
+                return primary, debug
+            else:
+                debug["same"] = False
+                used = "alt"
+                debug["used"] = used
+                return alt, debug
+        except Exception as e:
+            debug["alt_error"] = str(e)
+            return primary, debug
+    else:
+        debug["note"] = "ALT_TEXT_MODEL is same as primary or unset"
+        return primary, debug
+
 # ---------------- 3) 보정 ----------------
 def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: str) -> str:
     if not draft:
         return ""
     frames = analysis.get("frames") or [] if analysis else []
     length_rule = "5~7문장" if (category_hint == "journey_multi" or len(frames) > 1) else "3~4문장"
-    date_sequence = analysis.get("date_sequence") or [] if analysis else []
-
-    from datetime import date as _date
-    def _to_date(x):
-        if not x:
-            return None
-        if isinstance(x, _date):
-            return x
-        try:
-            return datetime.fromisoformat(str(x)).date()
-        except Exception:
-            return None
-
-    date_changes = []
-    if len(date_sequence) > 1:
-        for i in range(1, len(date_sequence)):
-            a = _to_date(date_sequence[i-1])
-            b = _to_date(date_sequence[i])
-            if a and b and a != b:
-                days_diff = (b - a).days
-                if days_diff >= 1:
-                    date_changes.append({
-                        "position": i,
-                        "days_diff": days_diff
-                    })
 
     sys = "당신은 말하듯 쓰는 텍스트를 다듬는 한국어 에디터입니다."
     user = f"""
@@ -659,19 +605,29 @@ def refine_diary(analysis: dict | None, draft: str, tone: str, category_hint: st
 {draft}
 
 [보정 지침]
-- 1인칭 체험체 + 과거형 유지. 관찰 나열 → 행동 중심으로 정리.
-- 프레임 **순서와 날짜 전환**을 보존. 전환사가 누락되면 추가.
+- **1인칭 체험체 + 과거형** 유지. 관찰 표현(눈에 들어왔다/보였다)은 행동 표현(잠시 바라봤다/앞에 있었다)로 정리.
+- 직접 체험 시점으로 전환하라. "나는"이나 "주어"를 직접적으로 쓰지 않고도, 주체의 **행위**가 자연스럽게 드러나게 표현해주세요.
+- 장면 간의 **맥락 연결어**(그때 / 잠시 후 / 그러다 / 한참 뒤 등)를 자연스럽게 추가해 시간 흐름을 암시하라.
+- 감정은 한순간이 아니라 **시간 속에서 변화**하는 느낌으로 조정하라.
 - 사람이 보이지 않으면 군중 묘사 금지. 소리·냄새 생성 금지.
-- 사실과 다른 고유명사 금지.
-- 문장 길이 변주. '~있었다' 반복 축소.
-- 과장·비유·메타표현 금지. 한 단락 유지.
-- 문장 수: {length_rule}. 톤: {tone or "중립"}.
+- 감정을 구체 감각으로 자연화. 리듬 단조는 문장 길이 변주로 보정.
+- 감정 변화의 원인이 있어야 한다.
+- 사실과 다른 고유명사(요리명·지명) 금지. 보이지 않으면 일반어 유지.
+- 너무 딱딱한 명사구 연쇄, '일상적인 풍경' 같은 추상 표현은 구체로 치환하거나 제거.
+- 문장 길이와 어미를 다양화. '~있었다' 반복을 줄이고 필요한 곳만 남김.
+- 감정의 포화가 되지 않도록 한 요소만 남기고 나머지는 암시로 처리해라.
+- 과장/비유/메타표현 금지 유지. 한 단락 유지.
+- **문장 수: {length_rule}. 톤: {tone or "중립"}**.중요.
 
 [절제 적용]
-- 감각 2개 이하. 직접 감정 1문장 이하. 나머지는 행동으로 암시.
+- 감각 언급 총 2개 초과 시 초과분 삭제.
+- 감정 직접 표현은 1문장 이하. 나머지는 행동으로 암시.
+- 금지어 제거: 지글지글, 노릇노릇, 바삭, 촉촉, 입안 가득, 코끝, 스며들다, 감돌다, 간질이다, 한껏, 가득, 벅차다, 특별했다, 미소가 지어졌다.
+- 비유·수사 제거. 추상어('일상적인 풍경/특별한 시간')는 구체로 치환하거나 삭제.
+
 
 [출력]
-- 한 단락만.
+- 한 단락만. 불필요한 수식어 축소. 관찰 나열 금지.
 """
     r = throttled_chat_completion(
         model=MODEL_TEXT,
@@ -695,11 +651,13 @@ TRIM_PHRASES = [
 ]
 
 def soften_report_tone(text: str) -> str:
+    """설명문 어색한 표현 정리."""
     if not text:
         return text
     t = text
     for p in TRIM_PHRASES:
         t = t.replace(p, "")
+    # 과도한 '있었다' 반복 완화(아주 약하게만)
     t = re.sub(r"(있었다\.)\s+(있었다\.)", r"\1 ", t)
     return t.strip()
 
@@ -752,7 +710,7 @@ def index():
 @app.post("/api/auto-diary")
 def api_auto_dairy():
     try:
-        # 1) multipart/form-data: 원본 저장 + EXIF 시각 주입
+        # 1) multipart/form-data
         if len(request.files) > 0:
             tone = request.form.get("tone") or "중립"
             photos = json.loads(request.form.get("photosSummary") or "[]")
@@ -762,11 +720,11 @@ def api_auto_dairy():
             saved_files = []
             debug_injected = []
             debug_meta_head = []
-            
+
             print(f"\n{'='*60}")
             print(f"[multipart 업로드] {len(files)}개 파일 수신")
             print(f"{'='*60}")
-            
+
             for idx, f in enumerate(files[:MAX_IMAGES]):
                 raw = f.read()
                 orig_name = secure_filename(f.filename or f"upload_{uuid.uuid4().hex}")
@@ -788,32 +746,19 @@ def api_auto_dairy():
                 saved_files.append(save_path)
 
                 exif_dt = _read_exif_datetime_from_bytes(raw)
-                
-                # photosSummary 시간
+
                 ps_time = None
                 if idx < len(photos):
                     ps = photos[idx] or {}
-                    cand_ps_keys = [
-                        "time", "takenAt", "timestamp", "fileCreatedAt",
-                        "createdAt", "created_at",
-                        "sentAt", "sent_at",
-                        "messageTime", "message_time",
-                        "kakaoTime", "kakao_time"
-                    ]
+                    cand_ps_keys = ["time","takenAt","timestamp","fileCreatedAt","createdAt","created_at","sentAt","sent_at","messageTime","message_time","kakaoTime","kakao_time"]
                     ps_time_str = next((ps.get(k) for k in cand_ps_keys if ps.get(k)), None)
                     if ps_time_str:
                         ps_time = _parse_any_dt(ps_time_str)
 
                 final_dt = exif_dt or ps_time or _dt_from_filename(orig_name)
                 data_url = f"data:{f.mimetype or 'image/jpeg'};base64,{base64.b64encode(raw).decode('ascii')}"
-                
-                img_dict = {
-                    "data": data_url,
-                    "filename": orig_name,
-                    "originalName": orig_name,
-                    "saved_path": save_path,
-                }
-                
+
+                img_dict = {"data": data_url, "filename": orig_name, "originalName": orig_name, "saved_path": save_path}
                 if final_dt:
                     img_dict["takenAt"] = final_dt.isoformat(sep=" ")
                     img_dict["timestamp"] = int(final_dt.timestamp() * 1000)
@@ -822,16 +767,19 @@ def api_auto_dairy():
                     debug_injected.append({"i": idx, "source": "exif|ps|name", "takenAt": img_dict["takenAt"]})
                 else:
                     debug_injected.append({"i": idx, "source": "none", "takenAt": ""})
-                
                 images.append(img_dict)
 
             print(f"{'='*60}\n")
 
             analysis = analyze_images(images, photos_summary=photos)
             category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
-            draft = draft_diary(analysis, tone, category_hint)
-            final_text = refine_diary(analysis, draft, tone, category_hint)
-            
+
+            # 교차검증 단계
+            selected_draft, cv_debug = select_draft_via_cross_validation(analysis, tone, category_hint)
+
+            # 보정 단계
+            final_text = refine_diary(analysis, selected_draft, tone, category_hint)
+
             if final_text:
                 return jsonify({
                     "ok": True,
@@ -843,7 +791,8 @@ def api_auto_dairy():
                     "date_sequence": (analysis or {}).get("date_sequence", []),
                     "saved_files": saved_files,
                     "debug_injected": debug_injected,
-                    "debug_meta_head": debug_meta_head
+                    "debug_meta_head": debug_meta_head,
+                    "cv_debug": cv_debug
                 })
             return jsonify({
                 "ok": True,
@@ -851,9 +800,10 @@ def api_auto_dairy():
                 "category": category_hint,
                 "used": "fallback",
                 "saved_files": saved_files,
+                "cv_debug": cv_debug
             })
 
-        # 2) JSON 경로: imagesMeta의 shotAt을 takenAt으로 주입
+        # 2) JSON 경로
         data = request.get_json(silent=True) or {}
         tone = data.get("tone") or "중립"
         images_raw = (data.get("images") or [])[:MAX_IMAGES]
@@ -863,30 +813,26 @@ def api_auto_dairy():
         images: list[dict] = []
         debug_injected = []
         debug_meta_head = [{"i": i, "shotAt": (images_meta[i] or {}).get("shotAt")} for i in range(min(len(images_meta), len(images_raw)))]
-        
+
         print(f"\n{'='*60}")
         print(f"[JSON 업로드] {len(images_raw)}개 이미지 수신")
         print(f"{'='*60}")
-        
+
         for i, img in enumerate(images_raw):
             item = {"data": img} if not isinstance(img, dict) else img.copy()
-            
             if i < len(images_meta):
                 meta = images_meta[i] or {}
                 shot = meta.get("shotAt")
                 if shot is not None:
                     try:
-                        ts_ms = None
-                        dt = None
+                        ts_ms = None; dt = None
                         if isinstance(shot, (int, float)):
                             shot_int = int(shot)
                             ts_ms = shot_int if shot_int > 10_000_000_000 else shot_int * 1000
                             dt = datetime.fromtimestamp(ts_ms / 1000.0)
                         elif isinstance(shot, str):
                             dt = _parse_any_dt(shot)
-                            if dt:
-                                ts_ms = int(dt.timestamp() * 1000)
-
+                            if dt: ts_ms = int(dt.timestamp() * 1000)
                         if dt and ts_ms is not None:
                             item["takenAt"]  = dt.isoformat(sep=" ")
                             item["timestamp"]= ts_ms
@@ -901,7 +847,6 @@ def api_auto_dairy():
                     debug_injected.append({"i": i, "source": "no_shotAt"})
             else:
                 debug_injected.append({"i": i, "source": "no_meta"})
-
             images.append(item)
 
         print(f"{'='*60}\n")
@@ -910,9 +855,13 @@ def api_auto_dairy():
             try:
                 analysis = analyze_images(images, photos_summary=photos)
                 category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
-                draft = draft_diary(analysis, tone, category_hint)
-                final_text = refine_diary(analysis, draft, tone, category_hint)
-                
+
+                # 교차검증 단계
+                selected_draft, cv_debug = select_draft_via_cross_validation(analysis, tone, category_hint)
+
+                # 보정 단계
+                final_text = refine_diary(analysis, selected_draft, tone, category_hint)
+
                 if final_text:
                     return jsonify({
                         "ok": True,
@@ -923,13 +872,15 @@ def api_auto_dairy():
                         "ordering_debug": (analysis or {}).get("ordering_debug", []),
                         "date_sequence": (analysis or {}).get("date_sequence", []),
                         "debug_injected": debug_injected,
-                        "debug_meta_head": debug_meta_head
+                        "debug_meta_head": debug_meta_head,
+                        "cv_debug": cv_debug
                     })
                 return jsonify({
                     "ok": True,
                     "body": random.choice(FALLBACKS),
                     "category": category_hint,
-                    "used": "fallback"
+                    "used": "fallback",
+                    "cv_debug": cv_debug
                 })
             except RateLimitError as e:
                 msg = getattr(e, "message", None) or str(e) or "rate_limit"
@@ -942,46 +893,23 @@ def api_auto_dairy():
                     match = re.search(r"try again in\s+(\d+)\s*ms", msg, re.I)
                     if match:
                         retry_ms = int(match.group(1))
-                return jsonify({
-                    "ok": False,
-                    "error": "rate_limit",
-                    "message": msg,
-                    "retry_after_ms": retry_ms
-                }), 429
+                return jsonify({"ok": False, "error": "rate_limit", "message": msg, "retry_after_ms": retry_ms}), 429
             except Exception as e:
                 traceback.print_exc()
                 category_hint = "journey_multi" if len(images) > 1 else "general_single"
-                return jsonify({
-                    "ok": True,
-                    "body": random.choice(FALLBACKS),
-                    "category": category_hint,
-                    "used": "fallback",
-                    "error": str(e)
-                })
+                return jsonify({"ok": True, "body": random.choice(FALLBACKS), "category": category_hint, "used": "fallback", "error": str(e)})
 
         # 3) 이미지 없으면 photosSummary로 최소 단서 생성
         lines: list[str] = []
         for p in photos:
-            base = " ".join([
-                (p.get("place") or "").strip(),
-                (p.get("time") or "").strip(),
-                (p.get("weather") or "").strip(),
-                (p.get("desc") or "").strip(),
-            ]).strip()
+            base = " ".join([(p.get("place") or "").strip(), (p.get("time") or "").strip(), (p.get("weather") or "").strip(), (p.get("desc") or "").strip()]).strip()
             base = clean_inline(base)
-            if base:
-                lines.append(base)
+            if base: lines.append(base)
 
         if lines:
             text = generate_from_lines(lines, tone)
             if text:
-                return jsonify({
-                    "ok": True,
-                    "body": text,
-                    "category": decide_category_from_lines(lines),
-                    "used": "summary-lines",
-                    "observations": lines
-                })
+                return jsonify({"ok": True, "body": text, "category": decide_category_from_lines(lines), "used": "summary-lines", "observations": lines})
 
         return jsonify({"ok": False, "error": "no_input", "message": "사진을 넣거나 최소 단서를 제공하세요."}), 400
 
@@ -1010,5 +938,6 @@ def _auto_diary_preflight():
 if __name__ == "__main__":
     print("\n===========================================")
     print("서버 시작 → http://127.0.0.1:5000")
+    print("ALT_TEXT_MODEL =", ALT_TEXT_MODEL)
     print("===========================================\n")
     app.run(host="0.0.0.0", port=5000, debug=False)
