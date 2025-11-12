@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snaplog | 로그인</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 60px;
+  background-color: #f4f6f9;
+}
+form {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+h2 { text-align: center; margin-bottom: 20px; }
+input { padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; }
+button {
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+#loginBtn { background-color: #4CAF50; color: white; }
+#signupPageBtn { background-color: #2196F3; color: white; }
+#forgotBtn { background-color: #FF9800; color: white; }
+#message { text-align: center; margin-top: 10px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<!-- 기본 로그인 폼 -->
+<form id="loginForm">
+  <h2>로그인</h2>
+  <input type="text" id="username" placeholder="아이디" required />
+  <input type="password" id="password" placeholder="비밀번호" required />
+  <button type="button" id="loginBtn">로그인</button>
+  <button type="button" id="signupPageBtn">회원가입</button>
+  <button type="button" id="forgotBtn">비밀번호 찾기</button>
+  <div id="message"></div>
+</form>
+
+<!-- 비밀번호 찾기 폼 -->
+<form id="forgotForm" class="hidden">
+  <h2>비밀번호 재설정</h2>
+  <input type="email" id="email" placeholder="이메일 입력" required />
+  <button type="button" id="sendCodeBtn">코드 받기</button>
+
+  <input type="text" id="code" placeholder="인증 코드 입력" class="hidden" />
+  <input type="password" id="newPassword" placeholder="새 비밀번호" class="hidden" />
+  <button type="button" id="resetBtn" class="hidden">비밀번호 변경</button>
+
+  <button type="button" id="backToLoginBtn" style="background-color:#9E9E9E; color:white;">로그인으로</button>
+  <div id="forgotMessage"></div>
+</form>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+
+// DOM 요소
+const loginForm = document.getElementById("loginForm");
+const forgotForm = document.getElementById("forgotForm");
+const msgDiv = document.getElementById("message");
+const forgotMsg = document.getElementById("forgotMessage");
+
+// 로그인
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  try {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if(res.ok){
+      window.location.href = "/diary";
+    } else {
+      msgDiv.textContent = data.detail || "로그인 실패";
+      msgDiv.style.color = "red";
+    }
+  } catch(err){
+    msgDiv.textContent = "서버 오류";
+    msgDiv.style.color = "red";
+  }
+});
+
+// 회원가입 이동
+document.getElementById("signupPageBtn").addEventListener("click", () => {
+  window.location.href = "/static/signup.html";
+});
+
+// 비밀번호 찾기 버튼 클릭 시 폼 전환
+document.getElementById("forgotBtn").addEventListener("click", () => {
+  loginForm.classList.add("hidden");
+  forgotForm.classList.remove("hidden");
+});
+
+// 로그인으로 돌아가기
+document.getElementById("backToLoginBtn").addEventListener("click", () => {
+  forgotForm.classList.add("hidden");
+  loginForm.classList.remove("hidden");
+});
+
+// 이메일로 코드 요청
+document.getElementById("sendCodeBtn").addEventListener("click", async () => {
+  const email = document.getElementById("email").value;
+  console.log("보내는 이메일:", email);
+  if (!email) return alert("이메일을 입력하세요.");
+
+  try {
+    const res = await fetch(`${API_BASE}/forgot_password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if(res.ok){
+      forgotMsg.textContent = "이메일로 인증 코드가 전송되었습니다.";
+      forgotMsg.style.color = "green";
+
+      // 다음 단계 입력 필드 표시
+      document.getElementById("code").classList.remove("hidden");
+      document.getElementById("newPassword").classList.remove("hidden");
+      document.getElementById("resetBtn").classList.remove("hidden");
+    } else {
+      forgotMsg.textContent = data.detail || "전송 실패";
+      forgotMsg.style.color = "red";
+    }
+  } catch(err){
+    forgotMsg.textContent = "서버 오류";
+    forgotMsg.style.color = "red";
+  }
+});
+
+// 코드 확인 + 새 비밀번호 설정
+document.getElementById("resetBtn").addEventListener("click", async () => {
+  const email = document.getElementById("email").value;
+  const code = document.getElementById("code").value;
+  const new_password = document.getElementById("newPassword").value;
+
+  if(!email || !code || !new_password){
+    return alert("모든 칸을 입력해주세요.");
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/reset_password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code, new_password })
+    });
+    const data = await res.json();
+
+    if(res.ok){
+      alert("비밀번호가 성공적으로 변경되었습니다!");
+      forgotForm.classList.add("hidden");
+      loginForm.classList.remove("hidden");
+    } else {
+      forgotMsg.textContent = data.detail || "재설정 실패";
+      forgotMsg.style.color = "red";
+    }
+  } catch(err){
+    forgotMsg.textContent = "서버 오류";
+    forgotMsg.style.color = "red";
+  }
+});
+</script>
+</body>
+</html>
