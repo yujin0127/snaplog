@@ -873,6 +873,8 @@
                       state.cursor = entry.id;
                       reflectCurrent();
                       updateCurrentDateEntries();
+                      // ✅ 일기 로드 이벤트 발생 (지도 업데이트용)
+                      window.dispatchEvent(new CustomEvent('entryLoaded'));
                   }
               }
           });
@@ -893,6 +895,7 @@
                       state.cursor = entry.id;
                       reflectCurrent();
                       updateCurrentDateEntries();
+                      window.dispatchEvent(new CustomEvent('entryLoaded'));
                   }
               }
           });
@@ -942,7 +945,7 @@
       
       // ✅ 추가: 선택된 날짜의 일기 목록 업데이트
       updateCurrentDateEntries();
-      
+
       // ✅ 일기 로드 이벤트 발생
       window.dispatchEvent(new CustomEvent('entryLoaded'));
     }

@@ -13,6 +13,7 @@ function initMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ 
     attribution: '© OpenStreetMap contributors' 
   }).addTo(leafletMap);
+  console.log('지도 초기화 완료');
 }
 
 // ✅ 같은 위치의 사진들을 그룹화하는 함수
@@ -147,19 +148,26 @@ async function loadMarkersToMap(){
   console.log('=== loadMarkersToMap 호출됨 ===');
   
   if(!leafletMap) {
-    console.log('leafletMap이 없음');
+    console.log('leafletMap이 없음 - 지도 초기화 필요');
     return;
   }
   
   // 기존 마커들 제거
-  markers.forEach(marker => leafletMap.removeLayer(marker));
+  markers.forEach(marker => {
+    try {
+      leafletMap.removeLayer(marker);
+    } catch(e) {
+      console.warn('마커 제거 실패:', e);
+    }
+  });
   markers = [];
+  console.log('기존 마커 모두 제거됨');
   
   const currentEntry = window.snaplogAPI?.getCurrentEntry?.();
   console.log('currentEntry:', currentEntry);
   
   if (!currentEntry) {
-    console.log('선택된 일기가 없음');
+    console.log('선택된 일기가 없음 - 지도 초기화');
     return;
   }
   
@@ -169,6 +177,7 @@ async function loadMarkersToMap(){
   }
   
   console.log('photoItems 개수:', currentEntry.photoItems.length);
+  console.log('photoItems 샘플:', currentEntry.photoItems.slice(0, 2));
 
   // ✅ 같은 위치의 사진들을 그룹화
   const locationGroups = groupPhotosByLocation(currentEntry.photoItems);
@@ -190,49 +199,75 @@ async function loadMarkersToMap(){
   console.log('총 마커 개수:', markers.length);
   
   // 마커가 있으면 지도 범위 조정
-  if (leafletMap && markers.length > 0) {
+  if (markers.length > 0) {
     try {
       const group = L.featureGroup(markers);
       leafletMap.fitBounds(group.getBounds().pad(0.25));
       console.log('지도 범위 조정 완료');
     } catch(e) {
-      console.warn('fitBounds failed', e);
+      console.warn('fitBounds 실패:', e);
     }
+  } else {
+    console.log('마커가 없어서 지도 범위 조정 안함');
   }
 }
 
 function isMapTabActive() {
   const mapTab = $$('.tab')[1];
-  return mapTab && mapTab.classList.contains('active');
+  const isActive = mapTab && mapTab.classList.contains('active');
+  console.log('지도 탭 활성화 상태:', isActive);
+  return isActive;
 }
 
 // 탭 클릭 이벤트
 tabs.forEach((t, i) => { 
   t.addEventListener('click', () => {
+    console.log('탭 클릭:', i);
     tabs.forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     
     const mapContainer = $('#mapContainer');
     
     if (i === 1) { 
+      console.log('지도 탭으로 전환');
       if (mapContainer) mapContainer.style.display = 'block';
       initMap();
-      loadMarkersToMap();
+      // 지도가 완전히 초기화된 후 마커 로드
+      setTimeout(() => {
+        if (leafletMap) {
+          leafletMap.invalidateSize();
+          loadMarkersToMap();
+        }
+      }, 100);
     } else { 
+      console.log('다른 탭으로 전환');
       if (mapContainer) mapContainer.style.display = 'none'; 
     }
   }); 
 });
 
+// ✅ entryLoaded 이벤트 리스너 - 지도 탭이 활성화되어 있을 때만 업데이트
 window.addEventListener('entryLoaded', () => {
-  console.log('entryLoaded 이벤트 발생, 지도 탭 활성화:', isMapTabActive());
-  if (isMapTabActive()) {
-    loadMarkersToMap();
+  console.log('=== entryLoaded 이벤트 감지됨 ===');
+  const mapTabActive = isMapTabActive();
+  console.log('지도 탭 활성화 여부:', mapTabActive);
+  
+  if (mapTabActive && leafletMap) {
+    console.log('지도 탭 활성 상태 - 마커 업데이트 시작');
+    // 약간의 지연을 두고 업데이트 (DOM 업데이트 완료 후)
+    setTimeout(() => loadMarkersToMap(), 50);
+  } else {
+    console.log('지도 탭 비활성 또는 지도 미초기화 - 마커 업데이트 건너뜀');
   }
 });
 
+// ✅ entrySaved 이벤트 리스너
 window.addEventListener('entrySaved', () => {
+  console.log('=== entrySaved 이벤트 감지됨 ===');
   if (mapInitialized && isMapTabActive()) {
-    loadMarkersToMap();
+    console.log('지도 업데이트 시작 (저장 후)');
+    setTimeout(() => loadMarkersToMap(), 50);
   }
 });
+
+console.log('snaplog_tab.js 로드 완료');
