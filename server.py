@@ -1268,7 +1268,16 @@ def index():
     if not os.path.exists(html_path):
         return f"Error: {html_path} 가 없습니다.", 404
     return send_file(html_path)
-
+    
+@app.get("/<path:filename>")
+def serve_static(filename):
+    """CSS, JS 등 정적 파일 제공"""
+    if filename.endswith(('.css', '.js', '.json', '.ico', '.png', '.jpg', '.svg')):
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+        if os.path.exists(file_path):
+            return send_file(file_path)
+    return ("Not Found", 404)
+    
 # ---------------- API ----------------
 @app.post("/api/auto-diary")
 def api_auto_dairy():
