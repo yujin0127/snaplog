@@ -247,6 +247,20 @@
       const im = document.createElement('img'); im.src = src; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover';
       d.appendChild(im); gallery.appendChild(d);
     });
+    // 수정 버튼 추가
+    const editBtn = document.getElementById('editModalBtn');
+    if(editBtn) editBtn.remove(); // 기존 버튼 제거
+    
+    const newEditBtn = document.createElement('button');
+    newEditBtn.id = 'editModalBtn';
+    newEditBtn.className = 'btn ghost';
+    newEditBtn.textContent = '수정';
+    newEditBtn.onclick = ()=> {
+      window.location.href = `./index.html?edit=${e.id}`;
+    };
+    
+    const closeBtn = document.getElementById('closeModal');
+    closeBtn.parentNode.insertBefore(newEditBtn, closeBtn);
   }
   $('#closeModal')?.addEventListener('click', ()=>{ $('#modal').style.display='none'; });
 
