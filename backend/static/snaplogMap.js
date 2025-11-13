@@ -2,7 +2,7 @@
     "use strict";
   
     // ================== 설정 ==================
-    const API_URL = "http://127.0.0.1:5000/api/auto-diary";
+    const API_URL = "/api/auto-diary";  // ✅ 상대 경로로 변경
     const FOOD_HINTS = [
       "food","meal","lunch","dinner","breakfast","cafe","coffee","cake","bread",
       "noodle","ramen","pizza","burger","pasta","sushi","식당","밥","점심","저녁",
@@ -44,7 +44,7 @@
       }
   
       // 이미지 축소(JPEG) → dataURL
-      async function downscaleToDataURL(file, maxSide = 1280, quality = 0.8) {
+      async function downscaleToDataURL(file, maxSide = 640, quality = 0.45) {
           const img = await new Promise((res, rej) => {
           const fr = new FileReader();
           fr.onload = () => {
@@ -69,48 +69,56 @@
           return canvas.toDataURL("image/jpeg", quality);
       }
   
-      // ================== IndexedDB helper ==================
-      function openDB(){
-          return new Promise((resolve,reject)=>{
-          const r = indexedDB.open('snaplog-db',1);
-          r.onupgradeneeded = ()=>{ 
-              const db = r.result; 
-              if(!db.objectStoreNames.contains('entries')) 
-              db.createObjectStore('entries',{keyPath:'id'});
-          };
-          r.onsuccess = ()=>resolve(r.result);
-          r.onerror = ()=>reject(r.error);
-          });
+      // ================== ✅ API 함수로 변경 ==================
+      async function saveEntryToAPI(entry){
+          try {
+              const response = await window.snaplogAuth.apiRequest('/api/diaries', {
+                  method: 'POST',
+                  body: JSON.stringify(entry)
+              });
+              
+              if (response && response.ok) {
+                  return true;
+              } else {
+                  throw new Error(response?.message || '저장 실패');
+              }
+          } catch (error) {
+              console.error('일기 저장 실패:', error);
+              throw error;
+          }
       }
   
-      async function saveEntryToIDB(entry){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readwrite');
-          tx.objectStore('entries').put(entry);
-          tx.oncomplete = ()=>{ resolve(true); db.close(); };
-          tx.onerror = ()=>{ reject(tx.error); db.close(); };
-          });
+      async function getAllFromAPI(){
+          try {
+              const response = await window.snaplogAuth.apiRequest('/api/diaries');
+              
+              if (response && response.ok) {
+                  return response.diaries || [];
+              } else {
+                  console.warn('일기 목록 조회 실패:', response);
+                  return [];
+              }
+          } catch (error) {
+              console.error('일기 목록 조회 실패:', error);
+              return [];
+          }
       }
   
-      async function getAllFromIDB(){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readonly');
-          const req = tx.objectStore('entries').getAll();
-          req.onsuccess = ()=>{ resolve(req.result); db.close(); };
-          req.onerror = ()=>{ reject(req.error); db.close(); };
-          });
-      }
-  
-      async function deleteEntryFromIDB(id){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readwrite');
-          tx.objectStore('entries').delete(id);
-          tx.oncomplete = ()=>{ resolve(true); db.close(); };
-          tx.onerror = ()=>{ reject(tx.error); db.close(); };
-          });
+      async function deleteEntryFromAPI(id){
+          try {
+              const response = await window.snaplogAuth.apiRequest(`/api/diaries/${id}`, {
+                  method: 'DELETE'
+              });
+              
+              if (response && response.ok) {
+                  return true;
+              } else {
+                  throw new Error(response?.message || '삭제 실패');
+              }
+          } catch (error) {
+              console.error('일기 삭제 실패:', error);
+              throw error;
+          }
       }
   
       // ================== 상태 ==================
@@ -176,7 +184,10 @@
           try {
           const r = await fetch(API_URL, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${window.snaplogAuth.getToken()}`  // ✅ 토큰 추가
+              },
               body: JSON.stringify(payload),
               signal: ctrl.signal,
           });
@@ -288,7 +299,7 @@
           box.innerHTML = "";
           state.entries
               .slice()
-              .reverse()
+              .sort((a,b)=>(b.tn||0)-(a.tn||0))  // ✅ 최신순 정렬
               .slice(0, 50)
               .forEach((e) => {
               const it = document.createElement("div");
@@ -456,7 +467,7 @@
               if (ph) ph.style.display = "grid";
               if (pw) pw.classList.remove("has-image");
           }
-          $("#text").value = e.body || "";
+          $("#text").value = e.body || e.text || "";  // ✅ text 필드도 지원
           const ti = $("#title");
           if (ti) ti.value = e.title || "";
           renderGallery();
@@ -574,8 +585,9 @@
           updateSelectedDateDisplay();
       }
   
+      // ✅ API에서 데이터 로드
       async function loadEntriesToState(){
-          state.entries = await getAllFromIDB();
+          state.entries = await getAllFromAPI();
           renderAll();
       }
   
@@ -713,6 +725,7 @@
       });
       }
   
+      // ✅ 저장 버튼 - API 사용
       $('#saveBtn').addEventListener('click', async ()=>{
           try{
           const body = ($('#text')?.value || '').trim();
@@ -722,18 +735,19 @@
           const entry = {
               id: state.cursor || newId(),
               title,
-              body,
+              text: body,  // ✅ body → text
               photo: state.tempPhotos[state.repIndex] || '',
               photos: state.tempPhotos.slice(0, MAX_UPLOAD),
               photoItems: state.photoItems.slice(0, MAX_UPLOAD),
               repIndex: state.repIndex,
               date: formatDate(state.selectedDate),
-              ts: state.selectedDate.getTime()
+              ts: state.selectedDate.getTime(),
+              tn: Date.now()
           };
   
-          await saveEntryToIDB(entry);
+          await saveEntryToAPI(entry);
           state.cursor = entry.id;
-          state.entries = await getAllFromIDB();
+          state.entries = await getAllFromAPI();
           renderAll();
           
           window.dispatchEvent(new CustomEvent('entrySaved'));
@@ -741,16 +755,17 @@
           alert('저장되었습니다.');
           }catch(e){
           console.error(e);
-          alert('저장 중 오류 발생');
+          alert('저장 중 오류 발생: ' + e.message);
           }
       });
     
+      // ✅ 삭제 버튼 - API 사용
       $('#delBtn').addEventListener('click', async ()=>{
           if(!state.cursor){ alert('삭제할 일기를 선택하세요'); return; }
           if(!confirm('정말 삭제하시겠습니까?')) return;
           try{
-            await deleteEntryFromIDB(state.cursor);
-            state.entries = await getAllFromIDB();
+            await deleteEntryFromAPI(state.cursor);
+            state.entries = await getAllFromAPI();
             state.cursor = null;
             renderAll();
             
@@ -759,7 +774,7 @@
             alert('삭제되었습니다.');
           }catch(e){
             console.error(e);
-            alert('삭제 중 오류 발생');
+            alert('삭제 중 오류 발생: ' + e.message);
           }
       });
   
@@ -777,12 +792,13 @@
         } 
       });
       
+      // ✅ 초기 로드
       loadEntriesToState();
     });
   
-    // ✅ 전역으로 노출
+    // ✅ 전역으로 노출 - API 함수로 변경
     window.snaplogAPI = {
-      getAllFromIDB: getAllFromIDB,
+      getAllFromAPI: getAllFromAPI,
       getEntries: () => state.entries
     };
   

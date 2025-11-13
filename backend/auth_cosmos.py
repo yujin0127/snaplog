@@ -253,18 +253,51 @@ def get_user_by_id(user_id: str) -> dict | None:
 
 # ============ 일기 관리 함수 ============
 
-def save_diary(user_id: str, diary_text: str, images: list = None, metadata: dict = None) -> dict:
+def save_diary(user_id: str, diary_text: str, title: str = "제목 없음", 
+               diary_date: str = "", images: list = None, 
+               photo_items: list = None, metadata: dict = None) -> dict:
     """사용자 일기 저장"""
     try:
+        from datetime import datetime
+        
         # 일기 ID 생성
         diary_id = f"diary_{int(datetime.utcnow().timestamp())}_{hash(user_id) % 10000}"
+        
+        # 날짜가 없으면 오늘 날짜 사용
+        if not diary_date:
+            diary_date = datetime.utcnow().date().isoformat()
+        
+        # ✅ photoItems 간소화 (dataURL 제거 - 중복 저장 방지)
+        simplified_items = []
+        if photo_items:
+            for item in photo_items:
+                simplified_item = {}
+                
+                # shotAt만 저장 (필수)
+                if item.get('shotAt'):
+                    simplified_item['shotAt'] = item['shotAt']
+                
+                # GPS 정보만 저장 (선택)
+                if item.get('gps'):
+                    simplified_item['gps'] = item['gps']
+                
+                # 파일명만 저장 (선택)
+                if item.get('name'):
+                    simplified_item['name'] = item['name']
+                
+                # dataURL은 제외! (photos 배열에 이미 있음)
+                
+                simplified_items.append(simplified_item)
         
         # 일기 데이터 생성
         diary_data = {
             'id': diary_id,
             'userId': user_id,
+            'title': title,
             'text': diary_text,
-            'images': images or [],
+            'date': diary_date,
+            'photos': images or [],  # ✅ photos만 저장!
+            'photoItems': simplified_items,  # ✅ 간소화된 버전!
             'metadata': metadata or {},
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat()
@@ -277,6 +310,8 @@ def save_diary(user_id: str, diary_text: str, images: list = None, metadata: dic
         
     except Exception as e:
         print(f"❌ 일기 저장 실패: {e}")
+        import traceback
+        traceback.print_exc()
         return {'ok': False, 'error': 'server_error', 'message': str(e)}
 
 
@@ -289,6 +324,23 @@ def get_user_diaries(user_id: str, limit: int = 50) -> list:
             enable_cross_partition_query=False,
             max_item_count=limit
         ))
+        
+        # ✅ photoItems 복원 (불러올 때 photos 배열의 dataURL을 다시 합침)
+        for diary in diaries:
+            if diary.get('photoItems') and diary.get('photos'):
+                restored_items = []
+                photos = diary['photos']
+                items = diary['photoItems']
+                
+                # photoItems 개수만큼 photos와 매칭
+                for i, item in enumerate(items):
+                    restored_item = item.copy()
+                    # photos 배열에서 해당 인덱스의 dataURL 추가
+                    if i < len(photos):
+                        restored_item['dataURL'] = photos[i]
+                    restored_items.append(restored_item)
+                
+                diary['photoItems'] = restored_items
         
         return diaries
         
@@ -309,7 +361,26 @@ def get_diary_by_id(diary_id: str, user_id: str) -> dict | None:
             enable_cross_partition_query=False
         ))
         
-        return diaries[0] if diaries else None
+        if not diaries:
+            return None
+        
+        diary = diaries[0]
+        
+        # ✅ photoItems 복원
+        if diary.get('photoItems') and diary.get('photos'):
+            restored_items = []
+            photos = diary['photos']
+            items = diary['photoItems']
+            
+            for i, item in enumerate(items):
+                restored_item = item.copy()
+                if i < len(photos):
+                    restored_item['dataURL'] = photos[i]
+                restored_items.append(restored_item)
+            
+            diary['photoItems'] = restored_items
+        
+        return diary
         
     except Exception as e:
         print(f"❌ 일기 조회 실패: {e}")
@@ -332,4 +403,289 @@ def delete_diary(diary_id: str, user_id: str) -> dict:
         
     except Exception as e:
         print(f"❌ 일기 삭제 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+# ============ 사용자 계정 관리 ============
+
+def change_password(user_id: str, current_password: str, new_password: str) -> dict:
+    """비밀번호 변경"""
+    try:
+        # 사용자 조회
+        users = list(users_container.query_items(
+            query="SELECT * FROM c WHERE c.id = @user_id",
+            parameters=[{"name": "@user_id", "value": user_id}],
+            enable_cross_partition_query=True
+        ))
+        
+        if not users:
+            return {'ok': False, 'error': 'user_not_found', 'message': '사용자를 찾을 수 없습니다.'}
+        
+        user = users[0]
+        
+        # 현재 비밀번호 확인
+        if not verify_password(current_password, user['password']):
+            return {'ok': False, 'error': 'wrong_password', 'message': '현재 비밀번호가 일치하지 않습니다.'}
+        
+        # 새 비밀번호 해싱
+        new_hashed = hash_password(new_password)
+        
+        # 업데이트
+        user['password'] = new_hashed
+        user['updated_at'] = datetime.utcnow().isoformat()
+        
+        users_container.replace_item(item=user['id'], body=user)
+        
+        return {'ok': True, 'message': '비밀번호가 변경되었습니다.'}
+        
+    except Exception as e:
+        print(f"❌ 비밀번호 변경 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+def delete_user_account(user_id: str, password: str) -> dict:
+    """회원 탈퇴 (모든 데이터 삭제)"""
+    try:
+        # 사용자 조회
+        users = list(users_container.query_items(
+            query="SELECT * FROM c WHERE c.id = @user_id",
+            parameters=[{"name": "@user_id", "value": user_id}],
+            enable_cross_partition_query=True
+        ))
+        
+        if not users:
+            return {'ok': False, 'error': 'user_not_found', 'message': '사용자를 찾을 수 없습니다.'}
+        
+        user = users[0]
+        
+        # 비밀번호 확인
+        if not verify_password(password, user['password']):
+            return {'ok': False, 'error': 'wrong_password', 'message': '비밀번호가 일치하지 않습니다.'}
+        
+        # 사용자의 모든 일기 삭제
+        diaries = list(diaries_container.query_items(
+            query="SELECT c.id FROM c WHERE c.userId = @user_id",
+            parameters=[{"name": "@user_id", "value": user_id}],
+            enable_cross_partition_query=False
+        ))
+        
+        for diary in diaries:
+            try:
+                diaries_container.delete_item(item=diary['id'], partition_key=user_id)
+            except Exception as e:
+                print(f"⚠️ 일기 삭제 실패 (diary_id: {diary['id']}): {e}")
+        
+        # 사용자 계정 삭제
+        users_container.delete_item(item=user['id'], partition_key=user['email'])
+        
+        print(f"✅ 회원 탈퇴 완료: {user['email']}")
+        return {'ok': True, 'message': '회원 탈퇴가 완료되었습니다.'}
+        
+    except Exception as e:
+        print(f"❌ 회원 탈퇴 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+# ============ 이메일 인증 및 비밀번호 재설정 ============
+
+# Verifications 컨테이너 초기화 (임시 인증 코드/토큰 저장)
+verifications_container = None
+
+def init_verifications_container():
+    """인증 코드/토큰 저장용 컨테이너 초기화"""
+    global verifications_container
+    try:
+        verifications_container = database.create_container_if_not_exists(
+            id="Verifications",
+            partition_key={"paths": ["/email"], "kind": "Hash"}
+        )
+        print("✅ Verifications 컨테이너 생성 완료")
+        return True
+    except Exception as e:
+        print(f"❌ Verifications 컨테이너 생성 실패: {e}")
+        return False
+
+
+def save_verification_code(email: str, code: str, purpose: str = "signup") -> dict:
+    """인증 코드 저장 (10분 유효)"""
+    try:
+        if not verifications_container:
+            init_verifications_container()
+        
+        verification_id = f"verify_{int(datetime.utcnow().timestamp())}_{hash(email) % 10000}"
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        
+        verification_data = {
+            'id': verification_id,
+            'email': email,
+            'code': code,
+            'purpose': purpose,  # "signup" 또는 "password_reset"
+            'created_at': datetime.utcnow().isoformat(),
+            'expires_at': expires_at.isoformat(),
+            'verified': False
+        }
+        
+        verifications_container.create_item(body=verification_data)
+        
+        return {'ok': True, 'verification_id': verification_id}
+        
+    except Exception as e:
+        print(f"❌ 인증 코드 저장 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+def verify_code(email: str, code: str, purpose: str = "signup") -> dict:
+    """인증 코드 확인"""
+    try:
+        if not verifications_container:
+            init_verifications_container()
+        
+        # 이메일과 목적으로 인증 코드 조회
+        verifications = list(verifications_container.query_items(
+            query="""
+                SELECT * FROM c 
+                WHERE c.email = @email 
+                AND c.purpose = @purpose 
+                AND c.verified = false
+                ORDER BY c.created_at DESC
+            """,
+            parameters=[
+                {"name": "@email", "value": email},
+                {"name": "@purpose", "value": purpose}
+            ],
+            enable_cross_partition_query=False
+        ))
+        
+        if not verifications:
+            return {'ok': False, 'error': 'code_not_found', 'message': '인증 코드를 찾을 수 없습니다.'}
+        
+        verification = verifications[0]
+        
+        # 만료 확인
+        expires_at = datetime.fromisoformat(verification['expires_at'])
+        if datetime.utcnow() > expires_at:
+            return {'ok': False, 'error': 'code_expired', 'message': '인증 코드가 만료되었습니다.'}
+        
+        # 코드 확인
+        if verification['code'] != code:
+            return {'ok': False, 'error': 'wrong_code', 'message': '인증 코드가 일치하지 않습니다.'}
+        
+        # 인증 완료 표시
+        verification['verified'] = True
+        verification['verified_at'] = datetime.utcnow().isoformat()
+        verifications_container.replace_item(item=verification['id'], body=verification)
+        
+        return {'ok': True, 'message': '인증이 완료되었습니다.'}
+        
+    except Exception as e:
+        print(f"❌ 인증 코드 확인 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+def save_reset_token(email: str, token: str) -> dict:
+    """비밀번호 재설정 토큰 저장 (1시간 유효)"""
+    try:
+        if not verifications_container:
+            init_verifications_container()
+        
+        token_id = f"reset_{int(datetime.utcnow().timestamp())}_{hash(email) % 10000}"
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        
+        token_data = {
+            'id': token_id,
+            'email': email,
+            'token': token,
+            'purpose': 'password_reset',
+            'created_at': datetime.utcnow().isoformat(),
+            'expires_at': expires_at.isoformat(),
+            'used': False
+        }
+        
+        verifications_container.create_item(body=token_data)
+        
+        return {'ok': True, 'token_id': token_id}
+        
+    except Exception as e:
+        print(f"❌ 재설정 토큰 저장 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+def verify_reset_token(token: str) -> dict:
+    """비밀번호 재설정 토큰 확인"""
+    try:
+        if not verifications_container:
+            init_verifications_container()
+        
+        # 토큰으로 조회
+        tokens = list(verifications_container.query_items(
+            query="""
+                SELECT * FROM c 
+                WHERE c.token = @token 
+                AND c.purpose = 'password_reset'
+                AND c.used = false
+            """,
+            parameters=[{"name": "@token", "value": token}],
+            enable_cross_partition_query=True
+        ))
+        
+        if not tokens:
+            return {'ok': False, 'error': 'token_not_found', 'message': '유효하지 않은 토큰입니다.'}
+        
+        token_data = tokens[0]
+        
+        # 만료 확인
+        expires_at = datetime.fromisoformat(token_data['expires_at'])
+        if datetime.utcnow() > expires_at:
+            return {'ok': False, 'error': 'token_expired', 'message': '토큰이 만료되었습니다.'}
+        
+        return {'ok': True, 'email': token_data['email'], 'token_id': token_data['id']}
+        
+    except Exception as e:
+        print(f"❌ 토큰 확인 실패: {e}")
+        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+
+
+def reset_password_with_token(token: str, new_password: str) -> dict:
+    """토큰으로 비밀번호 재설정"""
+    try:
+        # 토큰 확인
+        token_result = verify_reset_token(token)
+        if not token_result['ok']:
+            return token_result
+        
+        email = token_result['email']
+        token_id = token_result['token_id']
+        
+        # 사용자 조회
+        users = list(users_container.query_items(
+            query="SELECT * FROM c WHERE c.email = @email",
+            parameters=[{"name": "@email", "value": email}],
+            enable_cross_partition_query=True
+        ))
+        
+        if not users:
+            return {'ok': False, 'error': 'user_not_found', 'message': '사용자를 찾을 수 없습니다.'}
+        
+        user = users[0]
+        
+        # 새 비밀번호 해싱
+        new_hashed = hash_password(new_password)
+        
+        # 비밀번호 업데이트
+        user['password'] = new_hashed
+        user['updated_at'] = datetime.utcnow().isoformat()
+        users_container.replace_item(item=user['id'], body=user)
+        
+        # 토큰 사용 완료 표시
+        token_data = verifications_container.read_item(item=token_id, partition_key=email)
+        token_data['used'] = True
+        token_data['used_at'] = datetime.utcnow().isoformat()
+        verifications_container.replace_item(item=token_id, body=token_data)
+        
+        return {'ok': True, 'message': '비밀번호가 재설정되었습니다.'}
+        
+    except Exception as e:
+        print(f"❌ 비밀번호 재설정 실패: {e}")
         return {'ok': False, 'error': 'server_error', 'message': str(e)}

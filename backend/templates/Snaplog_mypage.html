@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>스냅로그 | 마이페이지</title>
+  <link rel="stylesheet" href="/static/snaplog.css">
+  <script src="/static/auth.js"></script>
+  <style>
+    .mypage-container {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .mypage-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .mypage-title {
+      font-size: 20px;
+      font-weight: 900;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+      background: var(--panel);
+      color: var(--text);
+      box-sizing: border-box;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .danger-zone {
+      border: 2px solid #ff4444;
+      background: rgba(255, 68, 68, 0.05);
+    }
+    .danger-text {
+      color: #ff4444;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .btn-danger {
+      background: #ff4444;
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #cc0000;
+    }
+    .user-info {
+      padding: 12px;
+      background: var(--panel);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .user-info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .user-info-item:last-child {
+      border-bottom: none;
+    }
+    .user-info-label {
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .user-info-value {
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="bg">
+    <div class="panel" style="display:block;">
+      <div class="topbar">
+        <div class="brand">스냅로그</div>
+        <div class="spacer"></div>
+        <div class="toggle" title="다크모드">
+          <span aria-hidden="true" class="label">다크모드</span>
+          <label class="switch">
+            <input id="darkToggleApp" type="checkbox"/>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button class="btn ghost" onclick="window.snaplogAuth.logout()" style="margin-left:12px;">로그아웃</button>
+        <a class="btn ghost" href="/" style="margin-left:12px; text-decoration: none;">메인으로</a>
+      </div>
+
+      <div class="mypage-container">
+        <!-- 사용자 정보 -->
+        <div class="mypage-card">
+          <div class="mypage-title">내 정보</div>
+          <div class="user-info" id="userInfo">
+            <div class="user-info-item">
+              <span class="user-info-label">이메일</span>
+              <span class="user-info-value" id="userEmail">-</span>
+            </div>
+            <div class="user-info-item">
+              <span class="user-info-label">이름</span>
+              <span class="user-info-value" id="userName">-</span>
+            </div>
+            <div class="user-info-item">
+              <span class="user-info-label">가입일</span>
+              <span class="user-info-value" id="userCreatedAt">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 비밀번호 변경 -->
+        <div class="mypage-card">
+          <div class="mypage-title">비밀번호 변경</div>
+          <form id="changePasswordForm">
+            <div class="form-group">
+              <label class="form-label">현재 비밀번호</label>
+              <input type="password" class="form-input" id="currentPassword" required 
+                     placeholder="현재 비밀번호를 입력하세요"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">새 비밀번호</label>
+              <input type="password" class="form-input" id="newPassword" required 
+                     placeholder="새 비밀번호를 입력하세요 (최소 6자)"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">새 비밀번호 확인</label>
+              <input type="password" class="form-input" id="confirmPassword" required 
+                     placeholder="새 비밀번호를 다시 입력하세요"/>
+            </div>
+            <button type="submit" class="btn" style="width:100%;">비밀번호 변경</button>
+          </form>
+        </div>
+
+        <!-- 회원 탈퇴 -->
+        <div class="mypage-card danger-zone">
+          <div class="mypage-title" style="color: #ff4444;">회원 탈퇴</div>
+          <p class="danger-text">
+            ⚠️ 회원 탈퇴 시 모든 일기와 데이터가 영구적으로 삭제됩니다.<br>
+            이 작업은 되돌릴 수 없습니다.
+          </p>
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">비밀번호 확인</label>
+            <input type="password" class="form-input" id="deletePassword" 
+                   placeholder="비밀번호를 입력하세요"/>
+          </div>
+          <button type="button" class="btn btn-danger" id="deleteAccountBtn" 
+                  style="width:100%;">회원 탈퇴</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      "use strict";
+
+      // 테마 적용
+      function loadLS(k,f){ try{ const v=localStorage.getItem(k); return v? JSON.parse(v): f; }catch(e){ return f; } }
+      function saveLS(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ console.warn("save fail",k,e); } }
+      function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); saveLS('theme', t); }
+      
+      const theme = loadLS('theme','light');
+      applyTheme(theme);
+      
+      const darkToggle = document.getElementById('darkToggleApp');
+      if(darkToggle){
+        darkToggle.checked = theme === 'dark';
+        darkToggle.addEventListener('change', ()=>{
+          const newTheme = darkToggle.checked ? 'dark' : 'light';
+          applyTheme(newTheme);
+        });
+      }
+
+      // 사용자 정보 로드
+      async function loadUserInfo(){
+        try {
+          const response = await window.snaplogAuth.apiRequest('/api/user/me');
+          
+          if(response && response.ok){
+            const user = response.user;
+            document.getElementById('userEmail').textContent = user.email || '-';
+            document.getElementById('userName').textContent = user.name || '-';
+            
+            if(user.created_at){
+              const date = new Date(user.created_at);
+              document.getElementById('userCreatedAt').textContent = 
+                date.toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'});
+            }
+          } else {
+            alert('사용자 정보를 불러올 수 없습니다.');
+            window.location.href = '/login';
+          }
+        } catch(e){
+          console.error('사용자 정보 로드 실패:', e);
+          alert('로그인이 필요합니다.');
+          window.location.href = '/login';
+        }
+      }
+
+      // 비밀번호 변경
+      document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+
+        if(newPassword.length < 6){
+          alert('새 비밀번호는 최소 6자 이상이어야 합니다.');
+          return;
+        }
+
+        if(newPassword !== confirmPassword){
+          alert('새 비밀번호가 일치하지 않습니다.');
+          return;
+        }
+
+        try {
+          const response = await window.snaplogAuth.apiRequest('/api/user/change-password', {
+            method: 'POST',
+            body: JSON.stringify({
+              current_password: currentPassword,
+              new_password: newPassword
+            })
+          });
+
+          if(response && response.ok){
+            alert('비밀번호가 변경되었습니다.');
+            document.getElementById('changePasswordForm').reset();
+          } else {
+            alert(response?.message || '비밀번호 변경에 실패했습니다.');
+          }
+        } catch(e){
+          console.error('비밀번호 변경 실패:', e);
+          alert('비밀번호 변경 중 오류가 발생했습니다.');
+        }
+      });
+
+      // 회원 탈퇴
+      document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+        const password = document.getElementById('deletePassword').value;
+
+        if(!password){
+          alert('비밀번호를 입력해주세요.');
+          return;
+        }
+
+        const confirmed = confirm(
+          '⚠️ 정말로 회원 탈퇴하시겠습니까?\n\n' +
+          '모든 일기와 데이터가 영구적으로 삭제되며,\n' +
+          '이 작업은 되돌릴 수 없습니다.'
+        );
+
+        if(!confirmed) return;
+
+        const doubleConfirm = confirm('정말 마지막 확인입니다. 탈퇴하시겠습니까?');
+        if(!doubleConfirm) return;
+
+        try {
+          const response = await window.snaplogAuth.apiRequest('/api/user/delete-account', {
+            method: 'DELETE',
+            body: JSON.stringify({ password })
+          });
+
+          if(response && response.ok){
+            alert('회원 탈퇴가 완료되었습니다.');
+            window.snaplogAuth.logout();
+          } else {
+            alert(response?.message || '회원 탈퇴에 실패했습니다.');
+          }
+        } catch(e){
+          console.error('회원 탈퇴 실패:', e);
+          alert('회원 탈퇴 중 오류가 발생했습니다.');
+        }
+      });
+
+      // 초기 로드
+      loadUserInfo();
+    })();
+  </script>
+</body>
+</html>

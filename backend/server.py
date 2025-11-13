@@ -1,6 +1,13 @@
 """Snaplog server – 3단계(분석→초안→보정) + 교차검증(모델 이중생성)"""
 from __future__ import annotations  # ← 맨 위로!
 
+from email_utils import (
+    generate_verification_code,
+    generate_reset_token,
+    send_verification_email,
+    send_password_reset_email
+)
+
 from auth_cosmos import (
     init_cosmos_db,
     create_user,
@@ -10,7 +17,15 @@ from auth_cosmos import (
     save_diary,
     get_user_diaries,
     get_diary_by_id,
-    delete_diary
+    delete_diary,
+    change_password,      # ✅ 추가!
+    delete_user_account,
+    save_verification_code,
+    verify_code,
+    save_reset_token,
+    verify_reset_token,
+    reset_password_with_token,
+    init_verifications_container # ✅ 추가!
 )
 import os, re, json, random, traceback, time, io, base64, uuid
 from threading import Lock
@@ -31,6 +46,8 @@ print("\n🔄 CosmosDB 연결 시도 중...")
 cosmos_initialized = init_cosmos_db()
 if cosmos_initialized:
     print("✅ CosmosDB 연결 성공!")
+    from auth_cosmos import init_verifications_container
+    init_verifications_container()
 else:
     print("⚠️  CosmosDB 초기화 실패. 인증 기능이 작동하지 않을 수 있습니다.")
 
@@ -1300,7 +1317,308 @@ def all_diaries():
 @app.get("/map")
 def map_page():
     return render_template("SnaplogMap.html")
+    
+@app.route('/mypage')
+def mypage():
+    return render_template("Snaplog_mypage.html")
 
+@app.route('/reset-password')
+def reset_password_page():
+    """비밀번호 재설정 페이지"""
+    return render_template('reset-password.html')
+
+
+@app.post("/api/send-verification")
+def api_send_verification():
+    """회원가입 인증 코드 전송"""
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip()
+        
+        if not email:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_email',
+                'message': '이메일을 입력해주세요.'
+            }), 400
+        
+        # 이메일 형식 검증
+        import re
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            return jsonify({
+                'ok': False,
+                'error': 'invalid_email',
+                'message': '올바른 이메일 형식이 아닙니다.'
+            }), 400
+        
+        # 인증 코드 생성
+        code = generate_verification_code()
+        
+        # CosmosDB에 저장
+        save_result = save_verification_code(email, code, purpose="signup")
+        if not save_result['ok']:
+            return jsonify(save_result), 500
+        
+        # 이메일 발송
+        email_sent = send_verification_email(email, code)
+        
+        if email_sent:
+            return jsonify({
+                'ok': True,
+                'message': '인증 코드가 이메일로 전송되었습니다.'
+            }), 200
+        else:
+            return jsonify({
+                'ok': False,
+                'error': 'email_send_failed',
+                'message': '이메일 전송에 실패했습니다. 이메일 설정을 확인해주세요.'
+            }), 500
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.post("/api/verify-code")
+def api_verify_code():
+    """인증 코드 확인"""
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip()
+        code = (data.get("code") or "").strip()
+        
+        if not email or not code:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_fields',
+                'message': '이메일과 인증 코드를 입력해주세요.'
+            }), 400
+        
+        result = verify_code(email, code, purpose="signup")
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            status_code = 400 if result.get('error') in ['code_expired', 'wrong_code'] else 500
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+# ============ 비밀번호 재설정 API ============
+
+@app.post("/api/forgot-password")
+def api_forgot_password():
+    """비밀번호 찾기 (재설정 링크 전송)"""
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip()
+        
+        if not email:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_email',
+                'message': '이메일을 입력해주세요.'
+            }), 400
+        
+        # 사용자 존재 확인
+        from auth_cosmos import users_container
+        users = list(users_container.query_items(
+            query="SELECT * FROM c WHERE c.email = @email",
+            parameters=[{"name": "@email", "value": email}],
+            enable_cross_partition_query=True
+        ))
+        
+        if not users:
+            # 보안: 사용자가 없어도 성공 메시지 (이메일 노출 방지)
+            return jsonify({
+                'ok': True,
+                'message': '재설정 링크가 이메일로 전송되었습니다.'
+            }), 200
+        
+        # 재설정 토큰 생성
+        reset_token = generate_reset_token()
+        
+        # CosmosDB에 저장
+        save_result = save_reset_token(email, reset_token)
+        if not save_result['ok']:
+            return jsonify(save_result), 500
+        
+        # 이메일 발송
+        email_sent = send_password_reset_email(email, reset_token)
+        
+        if email_sent:
+            return jsonify({
+                'ok': True,
+                'message': '재설정 링크가 이메일로 전송되었습니다.'
+            }), 200
+        else:
+            return jsonify({
+                'ok': False,
+                'error': 'email_send_failed',
+                'message': '이메일 전송에 실패했습니다.'
+            }), 500
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.post("/api/reset-password")
+def api_reset_password():
+    """비밀번호 재설정"""
+    try:
+        data = request.get_json(silent=True) or {}
+        token = (data.get("token") or "").strip()
+        new_password = (data.get("new_password") or "").strip()
+        
+        if not token or not new_password:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_fields',
+                'message': '토큰과 새 비밀번호를 입력해주세요.'
+            }), 400
+        
+        if len(new_password) < 6:
+            return jsonify({
+                'ok': False,
+                'error': 'password_too_short',
+                'message': '비밀번호는 최소 6자 이상이어야 합니다.'
+            }), 400
+        
+        result = reset_password_with_token(token, new_password)
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            status_code = 400 if result.get('error') in ['token_expired', 'token_not_found'] else 500
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+# ============ 마이페이지 API ============
+
+# 사용자 정보 조회
+@app.get("/api/user/me")
+@login_required
+def api_get_user_info():
+    """현재 로그인한 사용자 정보 조회"""
+    try:
+        user_info = get_user_by_id(request.user_id)
+        
+        if not user_info:
+            return jsonify({
+                'ok': False,
+                'error': 'user_not_found',
+                'message': '사용자를 찾을 수 없습니다.'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'user': user_info
+        }), 200
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+# 비밀번호 변경
+@app.post("/api/user/change-password")
+@login_required
+def api_change_password():
+    """비밀번호 변경"""
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        if not current_password or not new_password:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_fields',
+                'message': '현재 비밀번호와 새 비밀번호를 모두 입력해주세요.'
+            }), 400
+        
+        if len(new_password) < 6:
+            return jsonify({
+                'ok': False,
+                'error': 'password_too_short',
+                'message': '새 비밀번호는 최소 6자 이상이어야 합니다.'
+            }), 400
+        
+        result = change_password(request.user_id, current_password, new_password)
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+# 회원 탈퇴
+@app.delete("/api/user/delete-account")
+@login_required
+def api_delete_account():
+    """회원 탈퇴"""
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        password = data.get('password')
+        
+        if not password:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_password',
+                'message': '비밀번호를 입력해주세요.'
+            }), 400
+        
+        result = delete_user_account(request.user_id, password)
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
 # ========================================
 # 새로운 인증 관련 API 엔드포인트
 # ========================================
@@ -1450,6 +1768,61 @@ def api_get_diaries():
             'message': str(e)
         }), 500
 
+@app.post("/api/diaries")
+@login_required
+def api_save_diary():
+    """일기 저장 API"""
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        # 필수 필드 확인
+        diary_text = data.get("text") or data.get("body") or ""
+        if not diary_text.strip():
+            return jsonify({
+                'ok': False,
+                'error': 'missing_text',
+                'message': '일기 내용을 입력해주세요.'
+            }), 400
+        
+        # 일기 데이터 추출
+        title = data.get("title", "제목 없음")[:20]
+        photos = data.get("photos", [])
+        photo_items = data.get("photoItems", [])
+        rep_index = data.get("repIndex", 0)
+        diary_date = data.get("date", "")
+        
+        # 메타데이터 구성
+        metadata = {
+            'category': data.get('category', ''),
+            'tone': data.get('tone', '중립'),
+            'repIndex': rep_index,
+            'ts': data.get('ts'),
+            'tn': data.get('tn')
+        }
+        
+        # CosmosDB에 저장
+        result = save_diary(
+            user_id=request.user_id,
+            diary_text=diary_text,
+            title=title,
+            diary_date=diary_date,
+            images=photos,
+            photo_items=photo_items,
+            metadata=metadata
+        )
+        
+        if result['ok']:
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
 
 @app.get("/api/diaries/<diary_id>")
 @login_required
@@ -1868,6 +2241,15 @@ def add_cors_headers(resp):
 @app.route("/api/me", methods=["OPTIONS"])
 @app.route("/api/diaries", methods=["OPTIONS"])
 @app.route("/api/diaries/<diary_id>", methods=["OPTIONS"])
+@app.route("/api/user/me", methods=["OPTIONS"])                    # ✅ 추가!
+@app.route("/api/user/change-password", methods=["OPTIONS"])       # ✅ 추가!
+@app.route("/api/user/delete-account", methods=["OPTIONS"]) 
+@app.route("/api/send-verification", methods=["OPTIONS"])
+@app.route("/api/verify-code", methods=["OPTIONS"])
+@app.route("/api/forgot-password", methods=["OPTIONS"])
+@app.route("/api/reset-password", methods=["OPTIONS"])
+def _preflight_auth(diary_id=None):
+    return ("", 200)
 def _preflight(diary_id=None):
     return ("", 200)
 

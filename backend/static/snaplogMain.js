@@ -2,7 +2,7 @@
     "use strict";
   
     // ================== 설정 ==================
-    const API_URL = "http://127.0.0.1:5000/api/auto-diary";
+    const API_URL = "/api/auto-diary";  // ✅ 상대 경로로 변경
     const FOOD_HINTS = [
       "food","meal","lunch","dinner","breakfast","cafe","coffee","cake","bread",
       "noodle","ramen","pizza","burger","pasta","sushi","식당","밥","점심","저녁",
@@ -46,7 +46,7 @@
       }
   
       // 이미지 축소(JPEG) → dataURL
-      async function downscaleToDataURL(file, maxSide = 1280, quality = 0.8) {
+      async function downscaleToDataURL(file, maxSide = 800, quality = 0.6) {
           const img = await new Promise((res, rej) => {
           const fr = new FileReader();
           fr.onload = () => {
@@ -71,48 +71,56 @@
           return canvas.toDataURL("image/jpeg", quality);
       }
   
-      // ================== IndexedDB helper ==================
-      function openDB(){
-          return new Promise((resolve,reject)=>{
-          const r = indexedDB.open('snaplog-db',1);
-          r.onupgradeneeded = ()=>{ 
-              const db = r.result; 
-              if(!db.objectStoreNames.contains('entries')) 
-              db.createObjectStore('entries',{keyPath:'id'});
-          };
-          r.onsuccess = ()=>resolve(r.result);
-          r.onerror = ()=>reject(r.error);
-          });
+      // ================== ✅ CosmosDB API 함수로 변경 ==================
+      async function saveEntryToAPI(entry){
+          try {
+              const response = await window.snaplogAuth.apiRequest('/api/diaries', {
+                  method: 'POST',
+                  body: JSON.stringify(entry)
+              });
+              
+              if (response && response.ok) {
+                  return true;
+              } else {
+                  throw new Error(response?.message || '저장 실패');
+              }
+          } catch (error) {
+              console.error('일기 저장 실패:', error);
+              throw error;
+          }
       }
   
-      async function saveEntryToIDB(entry){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readwrite');
-          tx.objectStore('entries').put(entry);
-          tx.oncomplete = ()=>{ resolve(true); db.close(); };
-          tx.onerror = ()=>{ reject(tx.error); db.close(); };
-          });
+      async function getAllFromAPI(){
+          try {
+              const response = await window.snaplogAuth.apiRequest('/api/diaries');
+              
+              if (response && response.ok) {
+                  return response.diaries || [];
+              } else {
+                  console.warn('일기 목록 조회 실패:', response);
+                  return [];
+              }
+          } catch (error) {
+              console.error('일기 목록 조회 실패:', error);
+              return [];
+          }
       }
   
-      async function getAllFromIDB(){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readonly');
-          const req = tx.objectStore('entries').getAll();
-          req.onsuccess = ()=>{ resolve(req.result); db.close(); };
-          req.onerror = ()=>{ reject(req.error); db.close(); };
-          });
-      }
-  
-      async function deleteEntryFromIDB(id){
-          const db = await openDB();
-          return new Promise((resolve,reject)=>{
-          const tx = db.transaction('entries','readwrite');
-          tx.objectStore('entries').delete(id);
-          tx.oncomplete = ()=>{ resolve(true); db.close(); };
-          tx.onerror = ()=>{ reject(tx.error); db.close(); };
-          });
+      async function deleteEntryFromAPI(id){
+          try {
+              const response = await window.snaplogAuth.apiRequest(`/api/diaries/${id}`, {
+                  method: 'DELETE'
+              });
+              
+              if (response && response.ok) {
+                  return true;
+              } else {
+                  throw new Error(response?.message || '삭제 실패');
+              }
+          } catch (error) {
+              console.error('일기 삭제 실패:', error);
+              throw error;
+          }
       }
   
       // ================== 상태 ==================
@@ -180,7 +188,10 @@
           try {
           const r = await fetch(API_URL, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${window.snaplogAuth.getToken()}`  // ✅ 토큰 추가
+              },
               body: JSON.stringify(payload),
               signal: ctrl.signal,
           });
@@ -279,15 +290,13 @@
             state.currentDateEntryIndex = -1;
         }
         
-        // 일기 개수 표시 업데이트 (일기 현재 번호/전체 개수 형식)
+        // 일기 개수 표시 업데이트
         const countEl = $("#diaryCount");
         if (countEl) {
             const total = state.currentDateEntries.length;
             if (total === 0) {
                 countEl.textContent = "일기 0";
             } else if (state.currentDateEntryIndex >= 0 && state.currentDateEntryIndex < total) {
-                // ✅ 수정: 일기 현재 일기 번호/전체 개수 형식으로 표시
-                // 인덱스 0 (가장 최신) = 일기 total/total, 인덱스 1 = 일기 (total-1)/total, ...
                 const currentNum = total - state.currentDateEntryIndex;
                 countEl.textContent = `일기 ${currentNum}/${total}`;
             } else {
@@ -299,16 +308,12 @@
         const prevBtn = $("#prevDiary");
         const nextBtn = $("#nextDiary");
         if (prevBtn) {
-            // ✅ 수정: ◀ 버튼 = 더 최신 일기로 이동 (인덱스 감소)
-            // 인덱스 0(가장 최신 일기)일 때 숨김 처리
             const shouldHide = state.currentDateEntryIndex <= 0 || 
                                state.currentDateEntries.length === 0;
             prevBtn.style.display = shouldHide ? "none" : "inline-flex";
             prevBtn.disabled = shouldHide;
         }
         if (nextBtn) {
-            // ✅ 수정: ▶ 버튼 = 더 오래된 일기로 이동 (인덱스 증가)
-            // 마지막 인덱스(가장 오래된 일기)일 때 숨김 처리
             const shouldHide = state.currentDateEntryIndex < 0 || 
                                state.currentDateEntryIndex >= state.currentDateEntries.length - 1 ||
                                state.currentDateEntries.length === 0;
@@ -346,10 +351,9 @@
             if (!box) return;
             box.innerHTML = "";
 
-            // 저장된 날짜 기준 내림차순 정렬
             const sortedEntries = state.entries
               .slice()
-              .sort((a, b) => (b.tn || 0) - (a.tn || 0)); // 최신 저장 순
+              .sort((a, b) => (b.tn || 0) - (a.tn || 0));
 
             sortedEntries.slice(0, 50).forEach((e) => {
                 const it = document.createElement("div");
@@ -455,13 +459,11 @@
                 updateSelectedDateDisplay();
                 
                 const key = formatDate(state.selectedDate);
-                // ✅ 수정: 먼저 해당 날짜의 일기 목록을 만들고, 가장 최신 일기(마지막)를 선택
                 const dateEntries = state.entries
                     .filter((e) => e.date === key)
                     .sort((a, b) => (b.tn || 0) - (a.tn || 0));
                 
                 if (dateEntries.length > 0) {
-                    // 가장 최신 일기(첫 번째, 인덱스 0)를 선택
                     state.cursor = dateEntries[0].id;
                     state.currentDateEntryIndex = 0;
                 } else {
@@ -471,11 +473,7 @@
                 }
                 reflectCurrent();
                 renderCalendar();
-                
-                // ✅ 추가: 선택된 날짜의 일기 목록 업데이트 (버튼 상태 포함)
                 updateCurrentDateEntries();
-                
-                // ✅ 추가: 일기 로드 이벤트 발생
                 window.dispatchEvent(new CustomEvent('entryLoaded'));
             };
               cal.appendChild(cell);
@@ -534,7 +532,7 @@
               if (ph) ph.style.display = "grid";
               if (pw) pw.classList.remove("has-image");
           }
-          $("#text").value = e.body || "";
+          $("#text").value = e.body || e.text || "";  // ✅ text 필드도 지원
           const ti = $("#title");
           if (ti) ti.value = e.title || "";
           renderGallery();
@@ -650,12 +648,12 @@
         renderCalendar();
         reflectCurrent();
         updateSelectedDateDisplay();
-        // ✅ 추가: 선택된 날짜의 일기 목록 업데이트
         updateCurrentDateEntries();
       }
   
+      // ✅ API에서 데이터 로드
       async function loadEntriesToState(){
-          state.entries = await getAllFromIDB();
+          state.entries = await getAllFromAPI();
           renderAll();
       }
   
@@ -672,6 +670,7 @@
                   autoModal.classList.remove("active");
               }
           };
+          
           // 테마
           applyTheme(state.theme);
           const darkToggleApp = $("#darkToggleApp");
@@ -683,7 +682,7 @@
           });
           }
 
-      // 인트로 → 앱 전환 초기 한 번만 뜨게
+      // 인트로 → 앱 전환
       const intro = $("#intro");
       const app = $("#app");
       const startBtn = $("#startBtn");
@@ -806,6 +805,7 @@
         });
       }
   
+      // ✅ 저장 버튼 - API 사용
       $('#saveBtn').addEventListener('click', async ()=>{
           try{
           const body = ($('#text')?.value || '').trim();
@@ -815,19 +815,19 @@
           const entry = {
               id: state.cursor || newId(),
               title,
-              body,
+              text: body,  // ✅ body → text 로 서버와 맞춤
               photo: state.tempPhotos[state.repIndex] || '',
               photos: state.tempPhotos.slice(0, MAX_UPLOAD),
               photoItems: state.photoItems.slice(0, MAX_UPLOAD),
               repIndex: state.repIndex,
               date: formatDate(state.selectedDate),
               ts: state.selectedDate.getTime(),
-              tn: Date.now() // ✅ 선택 날짜가 아니라 작성된 현재 시간
+              tn: Date.now()
           };
   
-          await saveEntryToIDB(entry);
+          await saveEntryToAPI(entry);
           state.cursor = entry.id;
-          state.entries = await getAllFromIDB();
+          state.entries = await getAllFromAPI();
           renderAll();
           
           window.dispatchEvent(new CustomEvent('entrySaved'));
@@ -835,16 +835,17 @@
           alert('저장되었습니다.');
           }catch(e){
           console.error(e);
-          alert('저장 중 오류 발생');
+          alert('저장 중 오류 발생: ' + e.message);
           }
       });
     
+      // ✅ 삭제 버튼 - API 사용
       $('#delBtn').addEventListener('click', async ()=>{
           if(!state.cursor){ alert('삭제할 일기를 선택하세요'); return; }
           if(!confirm('정말 삭제하시겠습니까?')) return;
           try{
-            await deleteEntryFromIDB(state.cursor);
-            state.entries = await getAllFromIDB();
+            await deleteEntryFromAPI(state.cursor);
+            state.entries = await getAllFromAPI();
             state.cursor = null;
             renderAll();
             
@@ -853,17 +854,15 @@
             alert('삭제되었습니다.');
           }catch(e){
             console.error(e);
-            alert('삭제 중 오류 발생');
+            alert('삭제 중 오류 발생: ' + e.message);
           }
       });
   
 
-      // ✅ 추가: 이전 일기 버튼 클릭 핸들러 (◀ = 더 최신 일기로 이동)
+      // 이전/다음 일기 버튼
       const prevDiaryBtn = $("#prevDiary");
       if (prevDiaryBtn) {
           prevDiaryBtn.addEventListener('click', () => {
-              // ✅ 수정: ◀ 버튼 = 인덱스 감소 (더 최신 일기로)
-              // 인덱스 0(가장 최신 일기)가 아니고, 일기 목록이 있을 때만 이동
               if (state.currentDateEntryIndex > 0 && 
                   state.currentDateEntries.length > 0 &&
                   state.currentDateEntryIndex < state.currentDateEntries.length) {
@@ -873,19 +872,15 @@
                       state.cursor = entry.id;
                       reflectCurrent();
                       updateCurrentDateEntries();
-                      // ✅ 일기 로드 이벤트 발생 (지도 업데이트용)
                       window.dispatchEvent(new CustomEvent('entryLoaded'));
                   }
               }
           });
       }
 
-      // ✅ 추가: 다음 일기 버튼 클릭 핸들러 (▶ = 더 오래된 일기로 이동)
       const nextDiaryBtn = $("#nextDiary");
       if (nextDiaryBtn) {
           nextDiaryBtn.addEventListener('click', () => {
-              // ✅ 수정: ▶ 버튼 = 인덱스 증가 (더 오래된 일기로)
-              // 마지막 인덱스가 아니고, 일기 목록이 있을 때만 이동
               if (state.currentDateEntryIndex >= 0 && 
                   state.currentDateEntryIndex < state.currentDateEntries.length - 1 &&
                   state.currentDateEntries.length > 0) {
@@ -901,11 +896,10 @@
           });
       }
 
-      // ✅ 추가: 일기쓰기 버튼 클릭 핸들러
+      // 일기쓰기 버튼
       const newDiaryBtn = $("#newDiaryBtn");
       if (newDiaryBtn) {
           newDiaryBtn.addEventListener('click', () => {
-              // 새 일기 작성 모드로 전환
               state.cursor = null;
               state.currentDateEntryIndex = -1;
               resetComposer();
@@ -927,10 +921,10 @@
         } 
       });
       
+      // ✅ 초기 로드
       loadEntriesToState();
     });
   
-    // ✅ loadEntry 함수를 여기로 이동 (IIFE 안쪽, window.addEventListener 밖)
     function loadEntry(id) {
       state.cursor = id;
       const entry = state.entries.find(e => e.id === id);
@@ -942,17 +936,13 @@
           renderCalendar();
       }
       reflectCurrent();
-      
-      // ✅ 추가: 선택된 날짜의 일기 목록 업데이트
       updateCurrentDateEntries();
-
-      // ✅ 일기 로드 이벤트 발생
       window.dispatchEvent(new CustomEvent('entryLoaded'));
     }
 
-    // ✅ 전역으로 노출 (IIFE 맨 아래, 닫는 괄호 바로 위)
+    // 전역으로 노출
     window.snaplogAPI = {
-      getAllFromIDB: getAllFromIDB,
+      getAllFromAPI: getAllFromAPI,  // ✅ API 함수로 변경
       getEntries: () => state.entries,
       getCurrentEntry: () => {
         if (!state.cursor) return null;
@@ -965,13 +955,11 @@
      if (autoBtn && !autoBtn.dataset.autoBound) {
        autoBtn.dataset.autoBound = "1";
        autoBtn.addEventListener("click", async () => {
-         // photoItems 기준으로 진행
          if (!state.photoItems || state.photoItems.length === 0) {
            alert("직접 입력하시거나 사진을 넣어주세요");
            return;
          }
  
-         // 서버로 보낼 데이터 구성
          const images = state.photoItems
            .slice(0, MAX_UPLOAD)
            .map((p) => p.dataURL);
@@ -1003,4 +991,4 @@
        });
      }
      
-  })(); // ✅ IIFE 닫는 괄호
+  })();

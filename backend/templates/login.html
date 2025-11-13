@@ -3,211 +3,428 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>로그인 | 스냅로그</title>
+  <title>스냅로그 | 로그인</title>
   <link rel="stylesheet" href="/static/snaplog.css">
   <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    
     .auth-container {
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      background: var(--bg);
     }
+    
     .auth-card {
-      background: white;
+      background: var(--card);
+      border-radius: 16px;
       padding: 40px;
-      border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border: 1px solid var(--line);
     }
+    
     .auth-title {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 900;
       text-align: center;
-      margin-bottom: 10px;
-      color: #667eea;
+      margin-bottom: 8px;
+      color: var(--text);
+      letter-spacing: -0.5px;
     }
+    
     .auth-subtitle {
       text-align: center;
-      color: #666;
-      margin-bottom: 30px;
+      color: var(--muted);
+      margin-bottom: 32px;
       font-size: 14px;
+      line-height: 1.5;
     }
+    
     .form-group {
       margin-bottom: 20px;
     }
-    .form-group label {
+    
+    .form-label {
       display: block;
-      margin-bottom: 8px;
       font-weight: 600;
-      color: #333;
-    }
-    .form-group input {
-      width: 100%;
-      padding: 12px 16px;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
+      margin-bottom: 8px;
+      color: var(--text);
       font-size: 14px;
-      transition: border-color 0.3s;
-      box-sizing: border-box;
     }
-    .form-group input:focus {
+    
+    .form-input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      font-size: 15px;
+      background: var(--panel);
+      color: var(--text);
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    
+    .form-input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #4A90E2;
+      background: var(--card);
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
     }
+    
+    .form-input::placeholder {
+      color: var(--muted);
+      opacity: 0.6;
+    }
+    
     .btn-primary {
       width: 100%;
-      padding: 14px;
+      padding: 15px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      color: #ffffff !important;
       border: none;
       border-radius: 10px;
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 0.2s;
+      margin-top: 12px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      letter-spacing: 0.3px;
     }
+    
     .btn-primary:hover {
       transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
     }
+    
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+    
     .btn-primary:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+      transform: none;
     }
-    .auth-footer {
-      text-align: center;
-      margin-top: 20px;
-      color: #666;
+    
+    .auth-links {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
       font-size: 14px;
     }
-    .auth-footer a {
+    
+    .auth-link {
       color: #667eea;
       text-decoration: none;
-      font-weight: 600;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s ease;
     }
-    .auth-footer a:hover {
+    
+    .auth-link:hover {
+      color: #764ba2;
       text-decoration: underline;
     }
+    
+    .error-message, .success-message {
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+    
     .error-message {
       background: #fee;
       color: #c33;
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 14px;
-      display: none;
+      border: 1px solid #fcc;
     }
+    
     .success-message {
       background: #efe;
       color: #3c3;
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 14px;
+      border: 1px solid #cfc;
+    }
+    
+    .forgot-password-section {
+      margin-top: 32px;
+      padding-top: 32px;
+      border-top: 1px solid var(--line);
       display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .forgot-password-section.active {
+      display: block;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .forgot-password-section .auth-title {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    
+    /* 다크모드 지원 */
+    [data-theme="dark"] .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff !important;
+    }
+    
+    [data-theme="dark"] .auth-card {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    
+    /* 반응형 */
+    @media (max-width: 480px) {
+      .auth-card {
+        padding: 32px 24px;
+      }
+      
+      .auth-title {
+        font-size: 28px;
+      }
+      
+      .auth-links {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="auth-container">
-    <div class="auth-card">
-      <div class="auth-title">스냅로그</div>
-      <div class="auth-subtitle">사진으로 남기는 오늘의 순간</div>
-      
-      <div id="errorMessage" class="error-message"></div>
-      <div id="successMessage" class="success-message"></div>
-      
-      <form id="loginForm">
-        <div class="form-group">
-          <label for="email">이메일</label>
-          <input type="email" id="email" name="email" required placeholder="example@email.com">
+  <div class="bg">
+    <div class="auth-container">
+      <div class="auth-card">
+        <!-- 로그인 섹션 -->
+        <div id="loginSection">
+          <div class="auth-title">🌟 스냅로그</div>
+          <div class="auth-subtitle">사진으로 남기는 오늘의 순간</div>
+
+          <div id="loginError" class="error-message" style="display:none;"></div>
+
+          <form id="loginForm">
+            <div class="form-group">
+              <label class="form-label">이메일</label>
+              <input type="email" class="form-input" id="loginEmail" required 
+                     placeholder="your@email.com" autocomplete="email"/>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">비밀번호</label>
+              <input type="password" class="form-input" id="loginPassword" required 
+                     placeholder="비밀번호" autocomplete="current-password"/>
+            </div>
+
+            <button type="submit" class="btn-primary" id="loginBtn">
+              로그인
+            </button>
+          </form>
+
+          <div class="auth-links">
+            <a href="/signup" class="auth-link">회원가입</a>
+            <a class="auth-link" id="showForgotPassword">비밀번호 찾기</a>
+          </div>
         </div>
-        
-        <div class="form-group">
-          <label for="password">비밀번호</label>
-          <input type="password" id="password" name="password" required placeholder="비밀번호를 입력하세요">
+
+        <!-- 비밀번호 찾기 섹션 -->
+        <div id="forgotPasswordSection" class="forgot-password-section">
+          <div class="auth-title">🔑 비밀번호 재설정</div>
+          <div class="auth-subtitle">가입하신 이메일 주소를 입력해주세요</div>
+
+          <div id="forgotSuccess" class="success-message" style="display:none;"></div>
+          <div id="forgotError" class="error-message" style="display:none;"></div>
+
+          <form id="forgotPasswordForm">
+            <div class="form-group">
+              <label class="form-label">이메일</label>
+              <input type="email" class="form-input" id="forgotEmail" required 
+                     placeholder="your@email.com" autocomplete="email"/>
+            </div>
+
+            <button type="submit" class="btn-primary" id="forgotBtn">
+              재설정 링크 받기
+            </button>
+          </form>
+
+          <div class="auth-links" style="justify-content:center;">
+            <a class="auth-link" id="backToLogin">← 로그인으로 돌아가기</a>
+          </div>
         </div>
-        
-        <button type="submit" class="btn-primary" id="loginBtn">로그인</button>
-      </form>
-      
-      <div class="auth-footer">
-        계정이 없으신가요? <a href="/signup">회원가입</a>
       </div>
     </div>
   </div>
 
   <script>
-    // 이미 로그인되어 있으면 메인으로 리다이렉트
-    const token = localStorage.getItem('snaplog_token');
-    if (token) {
-      window.location.href = '/';
-    }
+    (function(){
+      "use strict";
 
-    const loginForm = document.getElementById('loginForm');
-    const loginBtn = document.getElementById('loginBtn');
-    const errorMessage = document.getElementById('errorMessage');
-    const successMessage = document.getElementById('successMessage');
+      const loginSection = document.getElementById('loginSection');
+      const forgotPasswordSection = document.getElementById('forgotPasswordSection');
+      const showForgotPasswordBtn = document.getElementById('showForgotPassword');
+      const backToLoginBtn = document.getElementById('backToLogin');
 
-    function showError(message) {
-      errorMessage.textContent = message;
-      errorMessage.style.display = 'block';
-      successMessage.style.display = 'none';
-    }
+      // 비밀번호 찾기 섹션 표시
+      showForgotPasswordBtn.addEventListener('click', () => {
+        loginSection.style.display = 'none';
+        forgotPasswordSection.classList.add('active');
+      });
 
-    function showSuccess(message) {
-      successMessage.textContent = message;
-      successMessage.style.display = 'block';
-      errorMessage.style.display = 'none';
-    }
+      // 로그인 섹션으로 돌아가기
+      backToLoginBtn.addEventListener('click', () => {
+        forgotPasswordSection.classList.remove('active');
+        loginSection.style.display = 'block';
+        document.getElementById('forgotPasswordForm').reset();
+        document.getElementById('forgotSuccess').style.display = 'none';
+        document.getElementById('forgotError').style.display = 'none';
+      });
 
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-      
-      if (!email || !password) {
-        showError('이메일과 비밀번호를 입력해주세요.');
-        return;
+      // ========== 로그인 ==========
+      const loginForm = document.getElementById('loginForm');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+
+      function showLoginError(message) {
+        loginError.textContent = message;
+        loginError.style.display = 'block';
       }
 
-      loginBtn.disabled = true;
-      loginBtn.textContent = '로그인 중...';
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password })
-        });
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
 
-        const data = await response.json();
-
-        if (data.ok) {
-          // 토큰 저장
-          localStorage.setItem('snaplog_token', data.token);
-          localStorage.setItem('snaplog_user', JSON.stringify(data.user));
-          
-          showSuccess('로그인 성공! 메인 페이지로 이동합니다...');
-          
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1000);
-        } else {
-          showError(data.message || '로그인에 실패했습니다.');
+        if(!email || !password) {
+          showLoginError('이메일과 비밀번호를 입력해주세요.');
+          return;
         }
-      } catch (error) {
-        console.error('로그인 에러:', error);
-        showError('서버와 통신 중 오류가 발생했습니다.');
-      } finally {
-        loginBtn.disabled = false;
-        loginBtn.textContent = '로그인';
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = '로그인 중...';
+        loginError.style.display = 'none';
+
+        try {
+          const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+          });
+
+          const data = await response.json();
+
+          if(data.ok && data.token) {
+            // 토큰 저장
+            localStorage.setItem('token', data.token);
+            
+            // 사용자 정보 저장
+            if(data.user) {
+              localStorage.setItem('user', JSON.stringify(data.user));
+            }
+
+            // 메인 페이지로 이동
+            window.location.href = '/';
+          } else {
+            showLoginError(data.message || '로그인에 실패했습니다.');
+            loginBtn.disabled = false;
+            loginBtn.textContent = '로그인';
+          }
+        } catch(error) {
+          console.error('로그인 오류:', error);
+          showLoginError('서버 오류가 발생했습니다.');
+          loginBtn.disabled = false;
+          loginBtn.textContent = '로그인';
+        }
+      });
+
+      // ========== 비밀번호 찾기 ==========
+      const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+      const forgotBtn = document.getElementById('forgotBtn');
+      const forgotSuccess = document.getElementById('forgotSuccess');
+      const forgotError = document.getElementById('forgotError');
+
+      function showForgotSuccess(message) {
+        forgotSuccess.textContent = message;
+        forgotSuccess.style.display = 'block';
+        forgotError.style.display = 'none';
       }
-    });
+
+      function showForgotError(message) {
+        forgotError.textContent = message;
+        forgotError.style.display = 'block';
+        forgotSuccess.style.display = 'none';
+      }
+
+      forgotPasswordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const email = document.getElementById('forgotEmail').value.trim();
+
+        if(!email) {
+          showForgotError('이메일을 입력해주세요.');
+          return;
+        }
+
+        forgotBtn.disabled = true;
+        forgotBtn.textContent = '전송 중...';
+
+        try {
+          const response = await fetch('/api/forgot-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email })
+          });
+
+          const data = await response.json();
+
+          if(data.ok) {
+            showForgotSuccess('✅ 비밀번호 재설정 링크가 이메일로 전송되었습니다. 이메일을 확인해주세요.');
+            forgotPasswordForm.reset();
+          } else {
+            showForgotError(data.message || '요청 처리 중 오류가 발생했습니다.');
+          }
+        } catch(error) {
+          console.error('비밀번호 찾기 오류:', error);
+          showForgotError('서버 오류가 발생했습니다.');
+        } finally {
+          forgotBtn.disabled = false;
+          forgotBtn.textContent = '재설정 링크 받기';
+        }
+      });
+
+      // 이미 로그인되어 있으면 메인으로
+      if(localStorage.getItem('token')) {
+        window.location.href = '/';
+      }
+    })();
   </script>
 </body>
 </html>

@@ -1,30 +1,21 @@
 (function(){
     "use strict";
   
-    // -------------------
-    // IndexedDB helper
-    // -------------------
-    function openDB(){
-        return new Promise((resolve,reject)=>{
-            const r = indexedDB.open('snaplog-db',1);
-            r.onupgradeneeded = ()=>{
-                const db = r.result;
-                if(!db.objectStoreNames.contains('entries'))
-                    db.createObjectStore('entries',{keyPath:'id'});
-            };
-            r.onsuccess = ()=>resolve(r.result);
-            r.onerror = ()=>reject(r.error);
-        });
-    }
-  
-    async function getAllFromIDB(){
-        const db = await openDB();
-        return new Promise((resolve,reject)=>{
-            const tx = db.transaction('entries','readonly');
-            const req = tx.objectStore('entries').getAll();
-            req.onsuccess = ()=>{ resolve(req.result); db.close(); };
-            req.onerror = ()=>{ reject(req.error); db.close(); };
-        });
+    // ================== ✅ API 함수로 변경 ==================
+    async function getAllFromAPI(){
+        try {
+            const response = await window.snaplogAuth.apiRequest('/api/diaries');
+            
+            if (response && response.ok) {
+                return response.diaries || [];
+            } else {
+                console.warn('일기 목록 조회 실패:', response);
+                return [];
+            }
+        } catch (error) {
+            console.error('일기 목록 조회 실패:', error);
+            return [];
+        }
     }
   
     // -------------------
@@ -110,7 +101,9 @@
     // 해시태그 필터링
     function hasHashtag(entry) {
       if (!mapState.hashtag) return true;
-      const tags = extractHashtags(entry.body);
+      // ✅ body와 text 둘 다 지원
+      const content = entry.body || entry.text || '';
+      const tags = extractHashtags(content);
       return tags.includes(mapState.hashtag.toLowerCase());
     }
 
@@ -481,8 +474,10 @@
       pathPolylines = [];
   
       const filtered = entries.filter(ent => {
-        if (!ent.body) return false;
-        const tags = extractHashtags(ent.body);
+        // ✅ body와 text 둘 다 지원
+        const content = ent.body || ent.text || '';
+        if (!content) return false;
+        const tags = extractHashtags(content);
         return tags.includes(hashtag.toLowerCase());
       });
   
@@ -574,7 +569,7 @@
     }
   
     // -------------------
-    // 데이터 로드 (IndexedDB에서)
+    // 데이터 로드 (✅ API에서)
     // -------------------
     async function loadMarkersToMap(){
       if(!markerCluster) return;
@@ -585,10 +580,11 @@
 
       let entriesArr = [];
       try {
-        entriesArr = await getAllFromIDB();
+        entriesArr = await getAllFromAPI();
         mapState.entries = entriesArr;
+        console.log('✅ 지도: API에서 데이터 로드 완료:', entriesArr.length, '개');
       } catch(e) { 
-        console.warn('loadMarkersToMap idb failed', e); 
+        console.warn('loadMarkersToMap API failed', e); 
       }
 
       renderStats();
@@ -597,8 +593,10 @@
       // 모든 해시태그 수집
       mapState.allHashtags.clear();
       entriesArr.forEach(ent => {
-        if (!ent.body) return;
-        const tags = extractHashtags(ent.body);
+        // ✅ body와 text 둘 다 지원
+        const content = ent.body || ent.text || '';
+        if (!content) return;
+        const tags = extractHashtags(content);
         tags.forEach(tag => mapState.allHashtags.add(tag));
       });
       updateHashtagList();
@@ -825,6 +823,11 @@
     // 일기 저장/삭제 시 지도 업데이트
     // -------------------
     window.addEventListener('entrySaved', () => {
+        if(mapInitialized) loadMarkersToMap();
+    });
+  
+    // ✅ 일기 로드 이벤트 감지 (메인 페이지에서 일기 선택 시)
+    window.addEventListener('entryLoaded', () => {
         if(mapInitialized) loadMarkersToMap();
     });
   
