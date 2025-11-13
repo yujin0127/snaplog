@@ -10,7 +10,7 @@ from openai import APIConnectionError, APITimeoutError
 from datetime import datetime, timedelta  # [추가] timedelta
 from werkzeug.utils import secure_filename
 
-# ---------------- Flask ----------------
+# ---------------- Flask ---------------
 
 app = Flask(__name__)
 CORS(app)
@@ -33,6 +33,7 @@ client = OpenAI(api_key=API_KEY)
 MODEL_VISION = "gpt-4o-mini"   # 이미지 분석
 MODEL_TEXT   = "gpt-4o-mini"   # 초안 1차
 ALT_TEXT_MODEL = os.getenv("OPENAI_ALT_TEXT_MODEL", "gpt-4o")  # 초안 2차(동일 프롬포트)
+MODERATION_MODEL = os.getenv("OPENAI_MODERATION_MODEL", "omni-moderation-latest")  # [추가] 텍스트 모더레이션
 
 MAX_IMAGES   = 5
 THROTTLE_SECONDS = float(os.getenv("OPENAI_THROTTLE_SECONDS", "0.5"))
@@ -136,7 +137,7 @@ def replace_proper_nouns_if_no_visible_text(analysis: dict, draft: str) -> str:
 
     return text
 
-# ---- 보고서형/나열/오타/시제/시점/리듬/감정 교정 ----
+# ---- 보고서형/나열/오타/시제/시점/시점/리듬/감정 교정 ----
 GENERIC_LIST_RE = re.compile(r"(국|찌개|탕|면|밥|반찬|김치)(?:[ ,과와및]+(국|찌개|탕|면|밥|반찬|김치))+", re.U)
 def simplify_food_enumeration(text: str) -> str:
     if not text: return text
@@ -435,6 +436,122 @@ def _food_likelihood_score(analysis: dict | None) -> float:
     # 가중 평균(단순)
     return 0.5 * has_food_ratio + 0.3 * kw_ratio + 0.2 * float(top_conf)
 
+# --------- 안전 필터 (추가) ----------
+def is_content_safe_for_diary(analysis: dict | None) -> tuple[bool, dict]:
+    """
+    분석 결과를 바탕으로 일기 텍스트 생성 전, 안전성 체크.
+    - frames.summary / elements / visible_text를 모아서 모더레이션 API에 보냄
+    - 문제가 있으면 False 반환
+    """
+    if not analysis:
+        return True, {"reason": "no_analysis"}
+
+    frames = analysis.get("frames") or []
+    if not frames:
+        return True, {"reason": "no_frames"}
+
+    texts: list[str] = []
+    for f in frames:
+        s = f.get("summary")
+        if isinstance(s, str):
+            texts.append(s)
+        els = f.get("elements")
+        if isinstance(els, list):
+            texts.extend(str(x) for x in els if x)
+        vt = f.get("visible_text")
+        if isinstance(vt, str):
+            texts.append(vt)
+
+    joined = " ".join(clean_inline(x) for x in texts if x).strip()
+    if not joined:
+        return True, {"reason": "empty_text"}
+
+    try:
+        resp = client.moderations.create(
+            model=MODERATION_MODEL,
+            input=joined[:4000],
+        )
+        result = resp.results[0]
+        flagged = bool(getattr(result, "flagged", False))
+        categories = getattr(result, "categories", {})
+        return (not flagged), {
+            "flagged": flagged,
+            "categories": categories,
+        }
+    except Exception as e:
+        # 모더레이션 실패 시에는 일단 통과시키되, 디버그 정보만 남김
+        return True, {"error": str(e)}
+
+# --------- 음식-dominant multi 판별 (추가) ----------
+def is_food_dominant_multi(analysis: dict | None) -> bool:
+    if not analysis:
+        return False
+    frames = analysis.get("frames") or []
+    if len(frames) < 2:
+        return False
+
+    has_food_ratio = sum(1 for f in frames if f.get("has_food") is True) / len(frames)
+    places = { (f.get("place_hint") or "").strip() for f in frames if f.get("place_hint") }
+    place_variety = len(places)
+    movement = (analysis.get("global") or {}).get("movement")
+
+    return (
+        has_food_ratio >= 0.8 and
+        place_variety <= 2 and
+        movement in (None, "", "없음", "불명")
+    )
+
+# --------- multi 음식 세트용 food_structured 보강 (추가) ----------
+def enrich_food_structured_for_multi(analysis: dict | None,
+                                     images: list | None = None,
+                                     photos_summary: list | None = None) -> dict | None:
+    """
+    다중 이미지 세트 중 음식-dominant인 경우,
+    각 has_food 프레임에 대해 단일 이미지 분석을 재사용해 food_structured/visible_text를 채운다.
+    - 기존 analyze_images의 단일 이미지 분기(프롬프트)를 그대로 재사용하기 위해
+      내부적으로 analyze_images([data_url])를 호출한다.
+    - prompts, 기존 로직을 변경하지 않고 '추가 호출'만 수행.
+    """
+    if not analysis:
+        return analysis
+    frames = analysis.get("frames") or []
+    if not frames:
+        return analysis
+
+    sorted_images = analysis.get("sorted_images") or []
+    if not sorted_images or len(sorted_images) != len(frames):
+        return analysis
+
+    for idx, f in enumerate(frames):
+        if not f.get("has_food"):
+            continue
+        if f.get("food_structured"):
+            continue
+        if idx >= len(sorted_images):
+            continue
+
+        img_data_url = sorted_images[idx]
+        try:
+            sub_analysis = analyze_images([img_data_url], photos_summary=None)
+        except Exception as e:
+            print(f"[enrich_food_structured_for_multi] sub analyze_images 실패 idx={idx}: {e}")
+            continue
+
+        if not sub_analysis:
+            continue
+        sub_frames = sub_analysis.get("frames") or []
+        if not sub_frames:
+            continue
+        sub_f = sub_frames[0]
+        fs = sub_f.get("food_structured")
+        if fs:
+            f["food_structured"] = fs
+        if not f.get("visible_text") and sub_f.get("visible_text"):
+            f["visible_text"] = sub_f["visible_text"]
+
+    analysis["food_fusion"] = fuse_food_candidates(analysis)
+    return analysis
+
 # ---------------- 1) 분석: 이미지 → 구조화 JSON ----------------
 def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | None = None) -> dict | None:
     """
@@ -608,6 +725,15 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
             {"role":"user","content": content}
         ]
     )
+
+    # [추가] Vision 단계 내장 content_filter 감지
+    try:
+        finish_reason = r.choices[0].finish_reason
+    except Exception:
+        finish_reason = None
+    if finish_reason == "content_filter":
+        return {"unsafe": True, "reason": "content_filter"}
+
     try:
         data = json.loads(r.choices[0].message.content or "{}")
         frames = data.get("frames") or []
@@ -618,6 +744,7 @@ def analyze_images(images: list[str] | list[dict], photos_summary: list[dict] | 
             f["elements"] = [clean_inline(x) for x in (f.get("elements") or []) if x]
         data["date_sequence"] = date_info_iso
         data["ordering_debug"] = ordering_debug
+        data["sorted_images"] = sorted_images  # [추가] multi-enrich용
         # --- 글로벌 음식 후보 융합 추가 ---
         data["food_fusion"] = fuse_food_candidates(data)
         return data
@@ -686,13 +813,17 @@ def draft_diary(analysis: dict | None, tone: str, category_hint: str, text_model
         ings = ", ".join(fs.get("ingredients_visible") or [])
         vt = (f.get("visible_text") or "").strip()
 
-        if vt:
-            parts.append(f"[텍스트:{vt}]")
-        else:
+        # 음식 프레임이면 글씨는 일기 단서로 쓰지 않고,
+        # 음식명/재료만 단서로 사용
+        if f.get("has_food") is True:
             if name and conf >= 0.75:
                 parts.append(f"#{name}")
             elif ings:
                 parts.append(f"[재료:{ings}]")
+        else:
+            # 음식이 아닌 프레임에서만 visible_text를 힌트로 전달
+            if vt:
+                parts.append(f"[텍스트:{vt}]")
         # ---------- 음식 단서 주입 끝 ----------
         if parts: bullets.append(f"- {idx}번: " + " ".join(parts))
 
@@ -899,6 +1030,8 @@ visible_text에 메뉴명이 실제로 보이면 confidence와 무관하게 그 
     reordered = _reorder_by_tags(draft, n_frames=len(frames), date_sequence=date_sequence)
     if reordered:
         draft = reordered
+    else:
+        draft = _TAG_RE.sub("", draft)
     has_break = len(_day_break_positions(date_sequence)) > 0
     if has_break and not _TIME_SHIFT_PAT.search(draft):
         stitched = compose_from_frames(analysis)
@@ -1062,6 +1195,8 @@ TRIM_PHRASES = [
     "가지런히 놓인 모습이",
     "식욕을 자극",
     "편안함을 가져다주었다",
+    "글자가 눈에 띄었다.",
+    "속도가 느려졌다",
 ]
 
 # 패턴 치환 추가
@@ -1100,7 +1235,7 @@ def generate_from_lines(lines: list[str], tone: str) -> str:
 
 메타표현·날짜·파일명 금지. 성별/인원수 추정 금지.
 
-{length_rule} 준수.
+54문장 준수.
 
 톤: {tone or "중립"}.
 
@@ -1204,6 +1339,17 @@ def api_auto_dairy():
             print(f"{'='*60}\n")
 
             analysis = analyze_images(images, photos_summary=photos)
+
+            # [추가] Vision 단계 content_filter에 걸린 경우 바로 차단
+            if analysis and analysis.get("unsafe"):
+                return jsonify({
+                    "ok": True,
+                    "body": "부적절한 내용이 감지되어 일기를 생성하지 않았습니다.",
+                    "category": "general_single",
+                    "used": "unsafe_filtered_vision",
+                    "moderation": analysis,
+                })
+
             if target_date:  # [추가]
                 try:
                     analysis["date_sequence"] = _shift_date_sequence(analysis.get("date_sequence") or [], target_date)
@@ -1211,7 +1357,28 @@ def api_auto_dairy():
                 except Exception as _e:
                     analysis["date_anchor_error"] = str(_e)
 
-            category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
+            # [추가] 안전성 필터
+            is_safe, mod_debug = is_content_safe_for_diary(analysis)
+            if not is_safe:
+                return jsonify({
+                    "ok": True,
+                    "body": "부적절한 내용이 감지되어 일기를 생성하지 않았습니다.",
+                    "category": "general_single",
+                    "used": "unsafe_filtered",
+                    "moderation": mod_debug,
+                })
+
+            frames_len = len((analysis or {}).get("frames") or [])
+
+            if analysis and frames_len > 1 and is_food_dominant_multi(analysis):
+                try:
+                    analysis = enrich_food_structured_for_multi(analysis, images=images, photos_summary=photos)
+                    category_hint = "food_multi"
+                except Exception as _e:
+                    analysis["food_multi_enrich_error"] = str(_e)
+                    category_hint = "journey_multi"
+            else:
+                category_hint = "journey_multi" if (analysis and frames_len > 1) else "general_single"
 
             # --- ALT 교차검증 스킵 판단 (추가) ---
             food_score = _food_likelihood_score(analysis)
@@ -1313,6 +1480,17 @@ def api_auto_dairy():
         if images:
             try:
                 analysis = analyze_images(images, photos_summary=photos)
+
+                # [추가] Vision 단계 content_filter에 걸린 경우 바로 차단
+                if analysis and analysis.get("unsafe"):
+                    return jsonify({
+                        "ok": True,
+                        "body": "부적절한 내용이 감지되어 일기를 생성하지 않았습니다.",
+                        "category": "general_single",
+                        "used": "unsafe_filtered_vision",
+                        "moderation": analysis,
+                    })
+
                 if target_date:  # [추가]
                     try:
                         analysis["date_sequence"] = _shift_date_sequence(analysis.get("date_sequence") or [], target_date)
@@ -1320,7 +1498,28 @@ def api_auto_dairy():
                     except Exception as _e:
                         analysis["date_anchor_error"] = str(_e)
 
-                category_hint = "journey_multi" if (analysis and len(analysis.get("frames") or []) > 1) else "general_single"
+                # [추가] 안전성 필터
+                is_safe, mod_debug = is_content_safe_for_diary(analysis)
+                if not is_safe:
+                    return jsonify({
+                        "ok": True,
+                        "body": "부적절한 내용이 감지되어 일기를 생성하지 않았습니다.",
+                        "category": "general_single",
+                        "used": "unsafe_filtered",
+                        "moderation": mod_debug,
+                    })
+
+                frames_len = len((analysis or {}).get("frames") or [])
+
+                if analysis and frames_len > 1 and is_food_dominant_multi(analysis):
+                    try:
+                        analysis = enrich_food_structured_for_multi(analysis, images=images, photos_summary=photos)
+                        category_hint = "food_multi"
+                    except Exception as _e:
+                        analysis["food_multi_enrich_error"] = str(_e)
+                        category_hint = "journey_multi"
+                else:
+                    category_hint = "journey_multi" if (analysis and frames_len > 1) else "general_single"
 
                 # --- ALT 교차검증 스킵 판단 (추가) ---
                 food_score = _food_likelihood_score(analysis)
