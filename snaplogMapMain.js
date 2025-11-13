@@ -744,7 +744,12 @@
             attribution: '© OpenStreetMap contributors' 
         }).addTo(leafletMap);
   
-        markerCluster = L.markerClusterGroup();
+        markerCluster = L.markerClusterGroup({
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          zoomToBoundsOnClick: true,
+          maxClusterRadius: 60
+        });
         leafletMap.addLayer(markerCluster);
   
         loadMarkersToMap().then(() => {
