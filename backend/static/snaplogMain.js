@@ -128,6 +128,8 @@
           tone: "중립",
           photoItems: [],
           theme: loadLS("theme", "light"),
+          currentDateEntries: [],
+          currentDateEntryIndex: -1,
       };
   
   
@@ -261,6 +263,60 @@
           }
       }
     
+      // ✅ 추가: 선택된 날짜의 일기 목록 업데이트 및 개수 표시
+      function updateCurrentDateEntries() {
+        const key = formatDate(state.selectedDate);
+        // 해당 날짜의 모든 일기를 시간순으로 정렬 (최신순)
+        state.currentDateEntries = state.entries
+            .filter((e) => e.date === key)
+            .sort((a, b) => (b.tn || 0) - (a.tn || 0));
+        
+        // 현재 cursor에 해당하는 일기의 인덱스 찾기
+        if (state.cursor) {
+            const idx = state.currentDateEntries.findIndex((e) => e.id === state.cursor);
+            state.currentDateEntryIndex = idx >= 0 ? idx : -1;
+        } else {
+            state.currentDateEntryIndex = -1;
+        }
+        
+        // 일기 개수 표시 업데이트 (일기 현재 번호/전체 개수 형식)
+        const countEl = $("#diaryCount");
+        if (countEl) {
+            const total = state.currentDateEntries.length;
+            if (total === 0) {
+                countEl.textContent = "일기 0";
+            } else if (state.currentDateEntryIndex >= 0 && state.currentDateEntryIndex < total) {
+                // ✅ 수정: 일기 현재 일기 번호/전체 개수 형식으로 표시
+                // 인덱스 0 (가장 최신) = 일기 total/total, 인덱스 1 = 일기 (total-1)/total, ...
+                const currentNum = total - state.currentDateEntryIndex;
+                countEl.textContent = `일기 ${currentNum}/${total}`;
+            } else {
+                countEl.textContent = `일기 ${total}`;
+            }
+        }
+        
+        // 이전/다음 버튼 활성화 상태 및 숨김 처리 업데이트
+        const prevBtn = $("#prevDiary");
+        const nextBtn = $("#nextDiary");
+        if (prevBtn) {
+            // ✅ 수정: ◀ 버튼 = 더 최신 일기로 이동 (인덱스 감소)
+            // 인덱스 0(가장 최신 일기)일 때 숨김 처리
+            const shouldHide = state.currentDateEntryIndex <= 0 || 
+                               state.currentDateEntries.length === 0;
+            prevBtn.style.display = shouldHide ? "none" : "inline-flex";
+            prevBtn.disabled = shouldHide;
+        }
+        if (nextBtn) {
+            // ✅ 수정: ▶ 버튼 = 더 오래된 일기로 이동 (인덱스 증가)
+            // 마지막 인덱스(가장 오래된 일기)일 때 숨김 처리
+            const shouldHide = state.currentDateEntryIndex < 0 || 
+                               state.currentDateEntryIndex >= state.currentDateEntries.length - 1 ||
+                               state.currentDateEntries.length === 0;
+            nextBtn.style.display = shouldHide ? "none" : "inline-flex";
+            nextBtn.disabled = shouldHide;
+        }
+    }
+
        // ================== 렌더러 ==================
       function renderStats() {
           try {
@@ -399,15 +455,25 @@
                 updateSelectedDateDisplay();
                 
                 const key = formatDate(state.selectedDate);
-                const hit = state.entries.find((e) => e.date === key);
-                if (hit) {
-                    state.cursor = hit.id;
+                // ✅ 수정: 먼저 해당 날짜의 일기 목록을 만들고, 가장 최신 일기(마지막)를 선택
+                const dateEntries = state.entries
+                    .filter((e) => e.date === key)
+                    .sort((a, b) => (b.tn || 0) - (a.tn || 0));
+                
+                if (dateEntries.length > 0) {
+                    // 가장 최신 일기(첫 번째, 인덱스 0)를 선택
+                    state.cursor = dateEntries[0].id;
+                    state.currentDateEntryIndex = 0;
                 } else {
                     state.cursor = null;
+                    state.currentDateEntryIndex = -1;
                     resetComposer();
                 }
                 reflectCurrent();
                 renderCalendar();
+                
+                // ✅ 추가: 선택된 날짜의 일기 목록 업데이트 (버튼 상태 포함)
+                updateCurrentDateEntries();
                 
                 // ✅ 추가: 일기 로드 이벤트 발생
                 window.dispatchEvent(new CustomEvent('entryLoaded'));
@@ -579,11 +645,13 @@
       }
   
       function renderAll() {
-          renderStats();
-          renderRecent();
-          renderCalendar();
-          reflectCurrent();
-          updateSelectedDateDisplay();
+        renderStats();
+        renderRecent();
+        renderCalendar();
+        reflectCurrent();
+        updateSelectedDateDisplay();
+        // ✅ 추가: 선택된 날짜의 일기 목록 업데이트
+        updateCurrentDateEntries();
       }
   
       async function loadEntriesToState(){
@@ -789,6 +857,59 @@
           }
       });
   
+
+      // ✅ 추가: 이전 일기 버튼 클릭 핸들러 (◀ = 더 최신 일기로 이동)
+      const prevDiaryBtn = $("#prevDiary");
+      if (prevDiaryBtn) {
+          prevDiaryBtn.addEventListener('click', () => {
+              // ✅ 수정: ◀ 버튼 = 인덱스 감소 (더 최신 일기로)
+              // 인덱스 0(가장 최신 일기)가 아니고, 일기 목록이 있을 때만 이동
+              if (state.currentDateEntryIndex > 0 && 
+                  state.currentDateEntries.length > 0 &&
+                  state.currentDateEntryIndex < state.currentDateEntries.length) {
+                  state.currentDateEntryIndex--;
+                  const entry = state.currentDateEntries[state.currentDateEntryIndex];
+                  if (entry) {
+                      state.cursor = entry.id;
+                      reflectCurrent();
+                      updateCurrentDateEntries();
+                  }
+              }
+          });
+      }
+
+      // ✅ 추가: 다음 일기 버튼 클릭 핸들러 (▶ = 더 오래된 일기로 이동)
+      const nextDiaryBtn = $("#nextDiary");
+      if (nextDiaryBtn) {
+          nextDiaryBtn.addEventListener('click', () => {
+              // ✅ 수정: ▶ 버튼 = 인덱스 증가 (더 오래된 일기로)
+              // 마지막 인덱스가 아니고, 일기 목록이 있을 때만 이동
+              if (state.currentDateEntryIndex >= 0 && 
+                  state.currentDateEntryIndex < state.currentDateEntries.length - 1 &&
+                  state.currentDateEntries.length > 0) {
+                  state.currentDateEntryIndex++;
+                  const entry = state.currentDateEntries[state.currentDateEntryIndex];
+                  if (entry) {
+                      state.cursor = entry.id;
+                      reflectCurrent();
+                      updateCurrentDateEntries();
+                  }
+              }
+          });
+      }
+
+      // ✅ 추가: 일기쓰기 버튼 클릭 핸들러
+      const newDiaryBtn = $("#newDiaryBtn");
+      if (newDiaryBtn) {
+          newDiaryBtn.addEventListener('click', () => {
+              // 새 일기 작성 모드로 전환
+              state.cursor = null;
+              state.currentDateEntryIndex = -1;
+              resetComposer();
+              updateCurrentDateEntries();
+          });
+      }
+
       $('#navPrev').addEventListener('click', ()=>{ 
         if(state.tempPhotos.length){ 
           state.viewIndex = (state.viewIndex - 1 + state.tempPhotos.length) % state.tempPhotos.length; 
@@ -818,6 +939,9 @@
           renderCalendar();
       }
       reflectCurrent();
+      
+      // ✅ 추가: 선택된 날짜의 일기 목록 업데이트
+      updateCurrentDateEntries();
       
       // ✅ 일기 로드 이벤트 발생
       window.dispatchEvent(new CustomEvent('entryLoaded'));
