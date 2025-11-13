@@ -1272,7 +1272,7 @@ def index():
 @app.get("/<path:filename>")
 def serve_static(filename):
     """CSS, JS 등 정적 파일 제공"""
-    if filename.endswith(('.css', '.js', '.json', '.ico', '.png', '.jpg', '.svg')):
+    if filename.endswith(('.html', '.css', '.js', '.json', '.ico', '.png', '.jpg', '.svg')):
         file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
         if os.path.exists(file_path):
             return send_file(file_path)
