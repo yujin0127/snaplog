@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <title>스냅로그 | 로그인</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/backend/static/login.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-logo">S</div>
+        <div>
+          <div class="brand-text">스냅로그</div>
+          <div class="subtitle">사진으로 남기는 오늘의 순간</div>
+        </div>
+      </div>
+
+      <h1 style="font-size:18px; margin:0 0 16px;">로그인</h1>
+
+      <!-- 로그인 FORM -->
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">이메일</label>
+          <input id="email" type="email" name="email" placeholder="example@email.com" required />
+        </div>
+
+        <div class="field">
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" name="password" placeholder="비밀번호를 입력하세요" required />
+        </div>
+
+        <div class="field-inline">
+          <label class="checkbox">
+            <input type="checkbox" name="remember" />
+            <span>로그인 상태 유지</span>
+          </label>
+          <a href="reset.html" class="link-small">비밀번호 재설정</a>
+        </div>
+
+        <button type="submit" class="btn btn-primary">로그인</button>
+      </form>
+
+      <div class="divider">
+        <span></span><label>또는</label><span></span>
+      </div>
+
+      <div class="bottom-text">
+        아직 계정이 없나요?
+        <a href="signup.html">회원가입</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 로그인 처리
+    document.getElementById("loginForm").addEventListener("submit", async function (e) {
+      e.preventDefault(); // 기본 폼 제출 막기
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // ★ 세션 쿠키 전달
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        alert("로그인 실패: " + (data.error || "알 수 없는 오류"));
+        return;
+      }
+
+      alert("로그인 성공!");
+      // 로그인 성공 → 메인 페이지 이동
+      window.location.href = "index.html"; 
+      // or Snaplog_main page
+    });
+  </script>
+
+</body>
+</html>
