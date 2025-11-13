@@ -310,6 +310,7 @@
   const yearSel = $('#filterYear');
   const monthSel = $('#filterMonth');
   const thisYear = new Date().getFullYear();
+  const thisMonth = new Date().getMonth()+1;
   
   // 전체 옵션 추가
   const allYearOpt = document.createElement('option');
@@ -337,8 +338,9 @@
     monthSel.appendChild(opt);
   }
   
-  yearSel.value=thisYear;
-  monthSel.value=new Date().getMonth()+1;
+  // 옵션 생성 후 값 설정
+  yearSel.value = String(thisYear);
+  monthSel.value = String(thisMonth);
 }
   initYearMonthFilters();
   
