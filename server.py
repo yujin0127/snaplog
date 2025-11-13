@@ -13,16 +13,7 @@ from werkzeug.utils import secure_filename
 # ---------------- Flask ---------------
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "https://yujin0127.github.io",
-            "https://https://snaplog.onrender.com",
-            "http://localhost:*",
-            "http://127.0.0.1:*"
-        ]
-    }
-})
+CORS(app)
 
 # 원본 저장 디렉터리
 
