@@ -1276,6 +1276,12 @@ def serve_static(filename):
         file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
         if os.path.exists(file_path):
             return send_file(file_path)
+    
+    # ⬇️ 이 부분 추가: 정적 파일이 아니면 index.html 반환 (SPA 라우팅) ⬇️
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+    if os.path.exists(html_path):
+        return send_file(html_path)
+    
     return ("Not Found", 404)
     
 # ---------------- API ----------------
