@@ -4,7 +4,8 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1" name="viewport"/>
   <title>스냅로그 | Snaplog</title>
-  <link rel="stylesheet" href="/backend/static/snaplog.css">
+  <script src="/static/auth.js"></script>
+  <link rel="stylesheet" href="/static/snaplog.css">
   <!-- 추가: EXIF 파서 -->
   <script src="https://unpkg.com/exifr/dist/exifr.min.js"></script>
   <!-- Leaflet + MarkerCluster -->
@@ -24,6 +25,7 @@
      <span class="badge" id="statMonth">이번 달 0</span>
      <span class="badge" id="statPhotos">사진 0</span>
      <div class="spacer"></div>
+     <button class="btn ghost" onclick="window.snaplogAuth.logout()" style="margin-left:12px;">로그아웃</button>
      <div class="toggle" title="다크모드">
       <span aria-hidden="true" class="label">다크모드</span>
       <label class="switch">
@@ -77,13 +79,9 @@
         <div id="allMap" style="height:500px; border-radius:12px;"></div>
       </div>
       <div class="tabs">
-        <a href="/backend/templetes/SnaplogMain.html" 
-        class="tab" data-tab="diary" style="text-decoration: none;">
-          일기
-        </a>
-       <div class="tab active" data-tab="map">지도</div>
-       <a href="/backend/templetes/Snaplog_allDiaries.html" 
-       class="tab" data-tab="all-diary" style="text-decoration: none;">전체일기</a>
+        <a href="/" class="tab" style="text-decoration: none; cursor: pointer;">일기</a>
+        <div class="tab active" data-tab="map">지도</div>
+        <a href="/alldiaries" class="tab" style="text-decoration: none; cursor: pointer;">전체일기</a>
       </div>
      </section>
     </div>
@@ -92,7 +90,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
-  <script src="/backend/static/snaplogMap.js"></script>
-  <script src="/backend/static/snaplogMapMain.js"></script>
+  <script src="/static/snaplogMap.js"></script>
+  <script src="/static/snaplogMapMain.js"></script>
 </body>
 </html>

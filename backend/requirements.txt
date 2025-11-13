@@ -1,0 +1,13 @@
+
+# 기존 패키지 (호환 버전으로 수정)
+Flask>=3.0.0
+Flask-CORS>=4.0.0
+openai>=1.0.0
+Pillow>=10.3.0
+Werkzeug>=3.0.0
+
+# 추가 패키지 (회원가입/로그인용)
+azure-cosmos>=4.5.0
+PyJWT>=2.8.0
+bcrypt>=4.1.0
+python-dotenv>=1.0.0

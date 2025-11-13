@@ -1,9 +1,20 @@
 """Snaplog server – 3단계(분석→초안→보정) + 교차검증(모델 이중생성)"""
+from __future__ import annotations  # ← 맨 위로!
 
-from __future__ import annotations
+from auth_cosmos import (
+    init_cosmos_db,
+    create_user,
+    authenticate_user,
+    get_user_by_id,
+    login_required,
+    save_diary,
+    get_user_diaries,
+    get_diary_by_id,
+    delete_diary
+)
 import os, re, json, random, traceback, time, io, base64, uuid
 from threading import Lock
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 from openai import OpenAI, RateLimitError
 from openai import APIConnectionError, APITimeoutError
@@ -14,6 +25,14 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
+
+# CosmosDB 초기화 (서버 시작 시)
+print("\n🔄 CosmosDB 연결 시도 중...")
+cosmos_initialized = init_cosmos_db()
+if cosmos_initialized:
+    print("✅ CosmosDB 연결 성공!")
+else:
+    print("⚠️  CosmosDB 초기화 실패. 인증 기능이 작동하지 않을 수 있습니다.")
 
 # 원본 저장 디렉터리
 
@@ -1264,13 +1283,228 @@ FALLBACKS = [
 # ---------------- HTML ----------------
 @app.get("/")
 def index():
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test4+map.html")
-    if not os.path.exists(html_path):
-        return f"Error: {html_path} 가 없습니다.", 404
-    return send_file(html_path)
+    return render_template("SnaplogMain.html")
+
+@app.get("/login")
+def login_page():
+    return render_template("login.html")
+
+@app.get("/signup")
+def signup_page():
+    return render_template("signup.html")
+
+@app.get("/alldiaries")
+def all_diaries():
+    return render_template("Snaplog_allDiaries.html")
+
+@app.get("/map")
+def map_page():
+    return render_template("SnaplogMap.html")
+
+# ========================================
+# 새로운 인증 관련 API 엔드포인트
+# ========================================
+
+@app.post("/api/signup")
+def api_signup():
+    """회원가입 API"""
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip()
+        password = (data.get("password") or "").strip()
+        name = (data.get("name") or "").strip()
+        
+        # 입력 검증
+        if not email or not password:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_fields',
+                'message': '이메일과 비밀번호를 입력해주세요.'
+            }), 400
+        
+        # 이메일 형식 검증
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            return jsonify({
+                'ok': False,
+                'error': 'invalid_email',
+                'message': '올바른 이메일 형식이 아닙니다.'
+            }), 400
+        
+        # 비밀번호 길이 검증
+        if len(password) < 6:
+            return jsonify({
+                'ok': False,
+                'error': 'weak_password',
+                'message': '비밀번호는 최소 6자 이상이어야 합니다.'
+            }), 400
+        
+        # 사용자 생성
+        result = create_user(email, password, name)
+        
+        if result['ok']:
+            return jsonify(result), 201
+        else:
+            status_code = 409 if result.get('error') == 'email_exists' else 500
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.post("/api/login")
+def api_login():
+    """로그인 API"""
+    try:
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip()
+        password = (data.get("password") or "").strip()
+        
+        # 입력 검증
+        if not email or not password:
+            return jsonify({
+                'ok': False,
+                'error': 'missing_fields',
+                'message': '이메일과 비밀번호를 입력해주세요.'
+            }), 400
+        
+        # 인증
+        result = authenticate_user(email, password)
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            status_code = 404 if result.get('error') == 'user_not_found' else 401
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.post("/api/logout")
+@login_required
+def api_logout():
+    """로그아웃 API"""
+    return jsonify({
+        'ok': True,
+        'message': '로그아웃되었습니다.'
+    }), 200
+
+
+@app.get("/api/me")
+@login_required
+def api_get_me():
+    """현재 로그인한 사용자 정보 조회"""
+    try:
+        user = get_user_by_id(request.user_id)
+        
+        if user:
+            return jsonify({
+                'ok': True,
+                'user': user
+            }), 200
+        else:
+            return jsonify({
+                'ok': False,
+                'error': 'user_not_found',
+                'message': '사용자를 찾을 수 없습니다.'
+            }), 404
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.get("/api/diaries")
+@login_required
+def api_get_diaries():
+    """내 일기 목록 조회"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        diaries = get_user_diaries(request.user_id, limit=limit)
+        
+        return jsonify({
+            'ok': True,
+            'diaries': diaries,
+            'count': len(diaries)
+        }), 200
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.get("/api/diaries/<diary_id>")
+@login_required
+def api_get_diary(diary_id):
+    """특정 일기 조회"""
+    try:
+        diary = get_diary_by_id(diary_id, request.user_id)
+        
+        if diary:
+            return jsonify({
+                'ok': True,
+                'diary': diary
+            }), 200
+        else:
+            return jsonify({
+                'ok': False,
+                'error': 'not_found',
+                'message': '일기를 찾을 수 없습니다.'
+            }), 404
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
+@app.delete("/api/diaries/<diary_id>")
+@login_required
+def api_delete_diary(diary_id):
+    """일기 삭제"""
+    try:
+        result = delete_diary(diary_id, request.user_id)
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            status_code = 404 if result.get('error') == 'not_found' else 500
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
+
 
 # ---------------- API ----------------
 @app.post("/api/auto-diary")
+@login_required 
 def api_auto_dairy():
     try:
         # 1) multipart/form-data
@@ -1403,9 +1637,24 @@ def api_auto_dairy():
                 final_text = refine_diary(analysis, selected_draft, tone, category_hint)
 
             if final_text:
+                # CosmosDB에 일기 저장
+                try:
+                    save_result = save_diary(
+                        user_id=request.user_id,
+                        diary_text=final_text,
+                        images=saved_files if 'saved_files' in locals() else [],
+                        metadata={
+                            'category': category_hint,
+                            'tone': tone,
+                        }
+                    )
+                    diary_id = save_result.get('diary_id')
+                except Exception:
+                    diary_id = None
                 return jsonify({
                     "ok": True,
                     "body": final_text,
+                    "diary_id": diary_id,
                     "category": category_hint,
                     "used": "vision-3stage",
                     "observations": (analysis or {}).get("frames", []),
@@ -1607,13 +1856,19 @@ def health():
 @app.after_request
 def add_cors_headers(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     resp.headers["Access-Control-Allow-Private-Network"] = "true"
     return resp
 
 @app.route("/api/auto-diary", methods=["OPTIONS"])
-def _auto_diary_preflight():
+@app.route("/api/signup", methods=["OPTIONS"])
+@app.route("/api/login", methods=["OPTIONS"])
+@app.route("/api/logout", methods=["OPTIONS"])
+@app.route("/api/me", methods=["OPTIONS"])
+@app.route("/api/diaries", methods=["OPTIONS"])
+@app.route("/api/diaries/<diary_id>", methods=["OPTIONS"])
+def _preflight(diary_id=None):
     return ("", 200)
 
 # ---------------- 실행 ----------------

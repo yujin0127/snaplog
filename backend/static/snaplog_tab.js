@@ -219,16 +219,22 @@ function isMapTabActive() {
   return isActive;
 }
 
-// 탭 클릭 이벤트
+// ✅ 탭 클릭 이벤트 (3개 탭 지원)
 tabs.forEach((t, i) => { 
   t.addEventListener('click', () => {
     console.log('탭 클릭:', i);
+    
+    // data-tab 속성으로 탭 구분
+    const tabType = t.getAttribute('data-tab');
+    console.log('탭 타입:', tabType);
+    
     tabs.forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     
     const mapContainer = $('#mapContainer');
     
-    if (i === 1) { 
+    // 탭에 따라 처리
+    if (tabType === 'map' || i === 1) { 
       console.log('지도 탭으로 전환');
       if (mapContainer) mapContainer.style.display = 'block';
       initMap();
@@ -239,8 +245,11 @@ tabs.forEach((t, i) => {
           loadMarkersToMap();
         }
       }, 100);
+    } else if (tabType === 'all-diary' || i === 2) {
+      console.log('전체일기 탭으로 전환 - 페이지 이동');
+      window.location.href = '/alldiaries';
     } else { 
-      console.log('다른 탭으로 전환');
+      console.log('일기 탭으로 전환');
       if (mapContainer) mapContainer.style.display = 'none'; 
     }
   }); 

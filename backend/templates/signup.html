@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>회원가입 | 스냅로그</title>
+  <link rel="stylesheet" href="/static/snaplog.css">
+  <style>
+    .auth-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px 0;
+    }
+    .auth-card {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 400px;
+    }
+    .auth-title {
+      font-size: 28px;
+      font-weight: 900;
+      text-align: center;
+      margin-bottom: 10px;
+      color: #667eea;
+    }
+    .auth-subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .form-group small {
+      display: block;
+      margin-top: 6px;
+      color: #666;
+      font-size: 12px;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+    }
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .auth-footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #666;
+      font-size: 14px;
+    }
+    .auth-footer a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .auth-footer a:hover {
+      text-decoration: underline;
+    }
+    .error-message {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+    .success-message {
+      background: #efe;
+      color: #3c3;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-title">회원가입</div>
+      <div class="auth-subtitle">스냅로그에 오신 것을 환영합니다!</div>
+      
+      <div id="errorMessage" class="error-message"></div>
+      <div id="successMessage" class="success-message"></div>
+      
+      <form id="signupForm">
+        <div class="form-group">
+          <label for="name">이름</label>
+          <input type="text" id="name" name="name" placeholder="홍길동">
+          <small>선택사항입니다</small>
+        </div>
+
+        <div class="form-group">
+          <label for="email">이메일</label>
+          <input type="email" id="email" name="email" required placeholder="example@email.com">
+        </div>
+        
+        <div class="form-group">
+          <label for="password">비밀번호</label>
+          <input type="password" id="password" name="password" required placeholder="최소 6자 이상">
+          <small>최소 6자 이상 입력해주세요</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="passwordConfirm">비밀번호 확인</label>
+          <input type="password" id="passwordConfirm" name="passwordConfirm" required placeholder="비밀번호를 다시 입력하세요">
+        </div>
+        
+        <button type="submit" class="btn-primary" id="signupBtn">회원가입</button>
+      </form>
+      
+      <div class="auth-footer">
+        이미 계정이 있으신가요? <a href="/login">로그인</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 이미 로그인되어 있으면 메인으로 리다이렉트
+    const token = localStorage.getItem('snaplog_token');
+    if (token) {
+      window.location.href = '/';
+    }
+
+    const signupForm = document.getElementById('signupForm');
+    const signupBtn = document.getElementById('signupBtn');
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.style.display = 'block';
+      successMessage.style.display = 'none';
+    }
+
+    function showSuccess(message) {
+      successMessage.textContent = message;
+      successMessage.style.display = 'block';
+      errorMessage.style.display = 'none';
+    }
+
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const passwordConfirm = document.getElementById('passwordConfirm').value;
+      
+      // 유효성 검사
+      if (!email) {
+        showError('이메일을 입력해주세요.');
+        return;
+      }
+
+      if (password.length < 6) {
+        showError('비밀번호는 최소 6자 이상이어야 합니다.');
+        return;
+      }
+
+      if (password !== passwordConfirm) {
+        showError('비밀번호가 일치하지 않습니다.');
+        return;
+      }
+
+      signupBtn.disabled = true;
+      signupBtn.textContent = '회원가입 중...';
+
+      try {
+        const response = await fetch('/api/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            email, 
+            password,
+            name: name || email.split('@')[0]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.ok) {
+          // 토큰 저장
+          localStorage.setItem('snaplog_token', data.token);
+          localStorage.setItem('snaplog_user', JSON.stringify(data.user));
+          
+          showSuccess('회원가입 성공! 메인 페이지로 이동합니다...');
+          
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 1500);
+        } else {
+          showError(data.message || '회원가입에 실패했습니다.');
+        }
+      } catch (error) {
+        console.error('회원가입 에러:', error);
+        showError('서버와 통신 중 오류가 발생했습니다.');
+      } finally {
+        signupBtn.disabled = false;
+        signupBtn.textContent = '회원가입';
+      }
+    });
+  </script>
+</body>
+</html>

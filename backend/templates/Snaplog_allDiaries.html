@@ -4,7 +4,8 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>스냅로그 | 전체 일기 목록</title>
-  <link rel="stylesheet" href="/backend/static/snaplog.css">
+  <script src="/static/auth.js"></script>
+  <link rel="stylesheet" href="/static/snaplog.css">
   <style>
     .layout { display:grid; grid-template-columns: 300px 1fr; gap:16px; padding:16px; }
     .list-area { display:flex; flex-direction:column; gap:12px; }
@@ -39,6 +40,7 @@
         <span class="badge" id="statMonth">이번 달 0</span>
         <span class="badge" id="statPhotos">사진 0</span>
         <div class="spacer"></div>
+        <button class="btn ghost" onclick="window.snaplogAuth.logout()" style="margin-left:12px;">로그아웃</button>
         <div class="toggle" title="다크모드">
           <span aria-hidden="true" class="label">다크모드</span>
           <label class="switch">
@@ -46,8 +48,7 @@
             <span class="slider"></span>
           </label>
         </div>
-        <a class="btn ghost" href="/backend/templetes/SnaplogMain.html" 
-        style="margin-left:12px; text-decoration: none;">작성하러 가기</a>
+        <a class="btn ghost" href="/" style="margin-left:12px; text-decoration: none;">작성하러 가기</a>
       </div>
 
       <div class="layout" id="layout">
@@ -85,12 +86,10 @@
                 <button id="nextPage" class="btn ghost">다음</button>
               </div>
               <div class="tabs">
-                <a href="/backend/templetes/SnaplogMain.html" 
-                class="tab" data-tab="diary" style="text-decoration: none;">일기</a>
-                <a href="/backend/templetes/SnaplogMap.html" 
-                class="tab" data-tab="map" style="text-decoration: none;">지도</a>
+                <a href="/" class="tab" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; justify-content: center;">일기</a>
+                <a href="/map" class="tab" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; justify-content: center;">지도</a>
                 <div class="tab active">전체일기</div>
-               </div>
+              </div>
             </div>
           </div>
         </section>
