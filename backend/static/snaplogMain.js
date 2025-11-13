@@ -283,51 +283,12 @@
           }
       }
   
-      // function renderRecent() {
-      //     try {
-      //     const box = $("#recent");
-      //     if (!box) return;
-      //     box.innerHTML = "";
-      //     state.entries
-      //         .slice()
-      //         .reverse()
-      //         .slice(0, 50)
-      //         .forEach((e) => {
-      //         const it = document.createElement("div");
-      //         it.className = "item";
-      //         const left = document.createElement("div");
-      //         left.innerHTML = `<div><strong>${e.title || "제목 없음"}</strong></div><div class="small">${e.date}</div>`;
-      //         const right = document.createElement("button");
-      //         right.className = "btn ghost";
-      //         right.textContent = state.cursor === e.id ? "닫기" : "보기";
-      //         right.onclick = () => {
-      //             if (state.cursor === e.id) {
-      //             resetComposer();
-      //             renderRecent();
-      //             } else {
-      //             loadEntry(e.id);
-      //             renderRecent();
-      //             }
-      //         };
-      //         it.append(left, right);
-      //         box.appendChild(it);
-      //         });
-      //     } catch (e) {
-      //     console.warn("renderRecent error", e);
-      //     }
-      // }
-  
       // 최근 일기 최근 작성/저장된 순
       function renderRecent() {
         try {
             const box = $("#recent");
             if (!box) return;
             box.innerHTML = "";
-    
-            // 선택된 날짜 기준 내림차순 정렬
-            // const sortedEntries = state.entries
-            //     .slice()
-            //     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
 
             // 저장된 날짜 기준 내림차순 정렬
             const sortedEntries = state.entries
@@ -653,25 +614,6 @@
               applyTheme(state.theme);
           });
           }
-  
-      // 인트로 → 앱 전환
-    //   const intro = $("#intro");
-    //   const app = $("#app");
-    //   const startBtn = $("#startBtn");
-    //   if (intro) intro.style.display = "block";
-    //   if (app) app.style.display = "none";
-    //   if (startBtn) {
-    //     startBtn.addEventListener("click", () => {
-    //       try {
-    //         resetComposer();
-    //         if (intro) intro.style.display = "none";
-    //         if (app) app.style.display = "block";
-    //         renderAll();
-    //       } catch (e) {
-    //         console.warn("startBtn error", e);
-    //       }
-    //     });
-    //   }
 
       // 인트로 → 앱 전환 초기 한 번만 뜨게
       const intro = $("#intro");
