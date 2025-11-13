@@ -655,23 +655,32 @@
       }
   
       async function loadEntriesToState(){
-          state.entries = await getAllFromIDB();
-          renderAll();
-
-          // ✅ 추가: URL에서 edit 파라미터 확인
+    state.entries = await getAllFromIDB();
+    renderAll();
+    
+    // ✅ URL에서 edit 파라미터 확인
     const urlParams = new URLSearchParams(window.location.search);
     const editId = urlParams.get('edit');
+    
+    console.log('🔍 edit 파라미터:', editId);
+    console.log('🔍 전체 일기 개수:', state.entries.length);
+    
     if (editId) {
         window.history.replaceState({}, '', './index.html');
         
         const entry = state.entries.find(e => e.id === editId);
+        console.log('🔍 찾은 일기:', entry);
+        
         if (entry) {
+            console.log('✅ 일기를 찾았습니다!');
             loadEntry(editId);
             
             const intro = $("#intro");
             const app = $("#app");
             if (intro) intro.style.display = "none";
             if (app) app.style.display = "block";
+        } else {
+            console.log('❌ 해당 ID의 일기를 찾을 수 없습니다');
         }
     }
 }
