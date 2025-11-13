@@ -472,118 +472,7 @@
         mapFilterArea.insertBefore(filterContainer, mapFilterArea.firstChild);
       }
     }
-
-    // 같은 위치의 사진들을 그룹화 (소수점 6자리 기준)
-    function groupPhotosByLocation(photoItems, entryInfo) {
-      const groups = {};
-      
-      photoItems.forEach(item => {
-        if (item.gps && item.gps.latitude && item.gps.longitude) {
-          const key = `${item.gps.latitude.toFixed(6)},${item.gps.longitude.toFixed(6)}`;
-          
-          if (!groups[key]) {
-            groups[key] = {
-              lat: item.gps.latitude,
-              lng: item.gps.longitude,
-              photos: [],
-              entries: new Set()
-            };
-          }
-          
-          groups[key].photos.push({ ...item, entry: entryInfo });
-          groups[key].entries.add(entryInfo.date);
-        }
-      });
-      
-      return Object.values(groups);
-    }
-
-    function createPhotoSlidePopup(locationGroup) {
-  const photos = locationGroup.photos;
-  const totalPhotos = photos.length;
-  const dates = Array.from(locationGroup.entries).sort();
   
-  if (totalPhotos === 1) {
-    // 사진 1장 - 기존 방식
-    const item = photos[0];
-    const ent = item.entry;
-    return `
-      <b>${ent.title || '제목 없음'}</b>
-      <div style="margin-top:4px; font-size:12px; color:#666;">${ent.date || ''}</div>
-      ${item.dataURL ? `<img src="${item.dataURL}" style="max-width:200px; display:block; margin-top:8px; border-radius:8px;">` : ''}
-      ${item.shotAt ? `<div style="margin-top:6px; font-size:11px; color:#888;">📷 ${new Date(item.shotAt).toLocaleString('ko-KR')}</div>` : ''}
-    `;
-  }
-  
-  // 사진 여러 장 - 슬라이드
-  const sliderId = 'slider-' + Math.random().toString(36).slice(2);
-  
-  let html = `
-    <div style="width:220px;">
-      <b>📍 이 위치</b>
-      <div style="margin-top:4px; font-size:11px; color:#666;">${dates.join(', ')}</div>
-      <div style="margin-top:2px; font-size:11px; color:#888;">총 ${totalPhotos}장</div>
-      <div style="position:relative; margin-top:8px;">
-        <div id="${sliderId}" style="position:relative; overflow:hidden; border-radius:8px;">
-  `;
-  
-  photos.forEach((item, idx) => {
-    const display = idx === 0 ? 'block' : 'none';
-    html += `
-      <div class="slide-item" data-index="${idx}" style="display:${display};">
-        <img src="${item.dataURL}" style="max-width:200px; display:block; border-radius:8px;">
-        <div style="margin-top:4px; font-size:11px; color:#666;"><b>${item.entry.title || '제목 없음'}</b></div>
-        <div style="font-size:10px; color:#888;">${item.entry.date}</div>
-        ${item.shotAt ? `<div style="font-size:10px; color:#888;">📷 ${new Date(item.shotAt).toLocaleString('ko-KR')}</div>` : ''}
-      </div>
-    `;
-  });
-  
-  html += `
-        </div>
-        <button onclick="window.changeSlide('${sliderId}', -1)" 
-                style="position:absolute; left:0; top:50%; transform:translateY(-50%); 
-                       background:rgba(0,0,0,0.5); color:white; border:none; 
-                       padding:8px 12px; cursor:pointer; border-radius:4px; font-size:18px;">‹</button>
-        <button onclick="window.changeSlide('${sliderId}', 1)" 
-                style="position:absolute; right:0; top:50%; transform:translateY(-50%); 
-                       background:rgba(0,0,0,0.5); color:white; border:none; 
-                       padding:8px 12px; cursor:pointer; border-radius:4px; font-size:18px;">›</button>
-        <div style="text-align:center; margin-top:8px; font-size:12px; color:#666;">
-          <span id="${sliderId}-counter">1</span> / ${totalPhotos}
-        </div>
-      </div>
-    </div>
-  `;
-  
-  return html;
-}
-
-// 전역 슬라이드 함수
-window.changeSlide = function(sliderId, direction) {
-  const container = document.getElementById(sliderId);
-  if (!container) return;
-  
-  const slides = container.querySelectorAll('.slide-item');
-  let currentIndex = -1;
-  
-  slides.forEach((slide, idx) => {
-    if (slide.style.display === 'block') {
-      currentIndex = idx;
-      slide.style.display = 'none';
-    }
-  });
-  
-  let newIndex = currentIndex + direction;
-  if (newIndex < 0) newIndex = slides.length - 1;
-  if (newIndex >= slides.length) newIndex = 0;
-  
-  slides[newIndex].style.display = 'block';
-  
-  const counter = document.getElementById(sliderId + '-counter');
-  if (counter) counter.textContent = newIndex + 1;
-};
-
     // -------------------
     // 경로 그리기 (태그 검색 시)
     // -------------------
@@ -738,103 +627,43 @@ window.changeSlide = function(sliderId, direction) {
             return isInDateRange(ent.date) && hasHashtag(ent);
           });
           
-          // filtered.forEach(ent => {
-          //   if (!ent.photoItems || !ent.photoItems.length) return;
+          filtered.forEach(ent => {
+            if (!ent.photoItems || !ent.photoItems.length) return;
   
-          //   ent.photoItems.forEach(item => {
-          //     if (item.gps && item.gps.latitude && item.gps.longitude) {
-          //       const popup = [];
-          //       popup.push(`<b>${ent.title || '제목 없음'}</b>`);
-          //       popup.push(`<div style="margin-top:4px; font-size:12px; color:#666;">${ent.date || ''}</div>`);
+            ent.photoItems.forEach(item => {
+              if (item.gps && item.gps.latitude && item.gps.longitude) {
+                const popup = [];
+                popup.push(`<b>${ent.title || '제목 없음'}</b>`);
+                popup.push(`<div style="margin-top:4px; font-size:12px; color:#666;">${ent.date || ''}</div>`);
   
-          //       if (item.dataURL) {
-          //         popup.push(`<img src="${item.dataURL}" style="max-width:200px; display:block; margin-top:8px; border-radius:8px;">`);
-          //       }
-  
-          //       if (item.shotAt) {
-          //         const shotDate = new Date(item.shotAt);
-          //         popup.push(`<div style="margin-top:6px; font-size:11px; color:#888;">📷 ${shotDate.toLocaleString('ko-KR')}</div>`);
-          //       }
-  
-          //       const color = getDayColor(ent.date);
-          //       const colorIcon = L.divIcon({
-          //         className: 'color-marker',
-          //         html: `<div style="
-          //           background-color: ${color};
-          //           width: 20px;
-          //           height: 20px;
-          //           border-radius: 50%;
-          //           border: 3px solid white;
-          //           box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-          //         "></div>`,
-          //         iconSize: [20, 20],
-          //         iconAnchor: [10, 10]
-          //       });
-  
-          //       const m = L.marker([item.gps.latitude, item.gps.longitude], { icon: colorIcon })
-          //                   .bindPopup(popup.join(''));
-          //       markerCluster.addLayer(m);
-          //     }
-          //   });
-            // 일반 마커 표시 - 위치별로 그룹화
-            const filtered = mapState.entries.filter(ent => {
-              return isInDateRange(ent.date) && hasHashtag(ent);
-            });
-            
-            // 모든 사진을 위치별로 그룹화
-            const allPhotoItems = [];
-            filtered.forEach(ent => {
-              if (!ent.photoItems || !ent.photoItems.length) return;
-              ent.photoItems.forEach(item => {
-                if (item.gps && item.gps.latitude && item.gps.longitude) {
-                  allPhotoItems.push({
-                    ...item,
-                    entry: { title: ent.title, date: ent.date }
-                  });
+                if (item.dataURL) {
+                  popup.push(`<img src="${item.dataURL}" style="max-width:200px; display:block; margin-top:8px; border-radius:8px;">`);
                 }
-              });
-            });
-            
-            // 그룹화
-            const tempGroups = {};
-            allPhotoItems.forEach(item => {
-              const key = `${item.gps.latitude.toFixed(6)},${item.gps.longitude.toFixed(6)}`;
-              if (!tempGroups[key]) {
-                tempGroups[key] = {
-                  lat: item.gps.latitude,
-                  lng: item.gps.longitude,
-                  photos: [],
-                  entries: new Set()
-                };
+  
+                if (item.shotAt) {
+                  const shotDate = new Date(item.shotAt);
+                  popup.push(`<div style="margin-top:6px; font-size:11px; color:#888;">📷 ${shotDate.toLocaleString('ko-KR')}</div>`);
+                }
+  
+                const color = getDayColor(ent.date);
+                const colorIcon = L.divIcon({
+                  className: 'color-marker',
+                  html: `<div style="
+                    background-color: ${color};
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                  "></div>`,
+                  iconSize: [20, 20],
+                  iconAnchor: [10, 10]
+                });
+  
+                const m = L.marker([item.gps.latitude, item.gps.longitude], { icon: colorIcon })
+                            .bindPopup(popup.join(''));
+                markerCluster.addLayer(m);
               }
-              tempGroups[key].photos.push(item);
-              tempGroups[key].entries.add(item.entry.date);
-            });
-            
-            const locationGroups = Object.values(tempGroups);
-            
-            // 그룹별로 마커 생성
-            locationGroups.forEach(group => {
-              const popupHtml = createPhotoSlidePopup(group);
-              const color = getDayColor(Array.from(group.entries).sort()[0]);
-              
-              const colorIcon = L.divIcon({
-                className: 'color-marker',
-                html: `<div style="
-                  background-color: ${color};
-                  width: 20px;
-                  height: 20px;
-                  border-radius: 50%;
-                  border: 3px solid white;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-                "></div>`,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-              });
-              
-              const m = L.marker([group.lat, group.lng], { icon: colorIcon })
-                          .bindPopup(popupHtml, { maxWidth: 250 });
-              markerCluster.addLayer(m);
             });
           });
         }
