@@ -283,7 +283,14 @@
       container.innerHTML = `<div style="text-align:center; color:var(--muted); padding:18px;">표시할 일기가 없습니다.</div>`;
     } else {
       pageItems.forEach(e=>{
+        // const row = document.createElement('div'); row.className = 'diary-row';
         const row = document.createElement('div'); row.className = 'diary-row';
+        row.style.cursor = 'pointer'; // 커서 모양 변경
+        row.onclick = (event) => {
+          // 버튼 클릭 시에는 row 클릭 무시
+          if (event.target.closest('button')) return;
+          openModal(e);
+        };
         const left = document.createElement('div'); left.className='diary-left';
         const img = document.createElement('img'); img.className='thumb-sm';
         const thumb = (e.photos && e.photos.length) ? e.photos[0] : (e.photo || '');
