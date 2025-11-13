@@ -650,14 +650,14 @@
                   className: 'color-marker',
                   html: `<div style="
                     background-color: ${color};
-                    width: 12px;
-                    height: 12px;
+                    width: 20px;
+                    height: 20px;
                     border-radius: 50%;
-                    border: 2px solid white;
+                    border: 3px solid white;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
                   "></div>`,
-                  iconSize: [12, 12],
-                  iconAnchor: [6, 6]
+                  iconSize: [20, 20],
+                  iconAnchor: [10, 10]
                 });
   
                 const m = L.marker([item.gps.latitude, item.gps.longitude], { icon: colorIcon })
