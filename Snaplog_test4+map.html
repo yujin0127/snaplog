@@ -56,7 +56,14 @@
       <div class="list small" id="recent"></div>
      </aside>
      <section class="card">
-      <div class="section-title">오늘의 기록</div>
+      <div class="section-title" style="display:flex; align-items:center; gap:8px;">
+       <span>오늘의 기록</span>
+       <span class="badge" id="diaryCount">일기 0</span>
+       <button class="btn ghost" id="prevDiary" type="button" style="padding:4px 8px; min-width:auto;">◀</button>
+       <button class="btn ghost" id="nextDiary" type="button" style="padding:4px 8px; min-width:auto;">▶</button>
+       <div style="margin-left:auto;"></div>
+       <button class="btn ghost" id="newDiaryBtn" type="button" style="padding:4px 12px; min-width:auto;">일기쓰기</button>
+      </div>
       <div class="tools">
        <label class="btn input-file daily_button">
         사진 업로드
@@ -121,4 +128,3 @@
   <script src="snaplog_tab3.js"></script>
  </body>
 </html>
-
