@@ -1616,10 +1616,18 @@ def add_cors_headers(resp):
 def _auto_diary_preflight():
     return ("", 200)
 
-# ---------------- 실행 ----------------
+# # ---------------- 실행 ----------------
+# if __name__ == "__main__":
+#     print("\n===========================================")
+#     print("서버 시작 → http://127.0.0.1:5000")
+#     print("ALT_TEXT_MODEL =", ALT_TEXT_MODEL)
+#     print("===========================================\n")
+#     app.run(host="0.0.0.0", port=5000, debug=False)
+
 if __name__ == "__main__":
-    print("\n===========================================")
-    print("서버 시작 → http://127.0.0.1:5000")
-    print("ALT_TEXT_MODEL =", ALT_TEXT_MODEL)
-    print("===========================================\n")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    import os
+    port = int(os.environ.get("PORT", 10000))  # ← 10000으로 변경!
+    print(f"\n{'='*60}")
+    print(f"서버 시작 → 0.0.0.0:{port}")
+    print(f"{'='*60}\n")
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
