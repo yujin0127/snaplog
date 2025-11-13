@@ -543,18 +543,18 @@
           }
       }
   
-      function loadEntry(id) {
-          state.cursor = id;
-          const entry = state.entries.find(e => e.id === id);
-          if (entry && entry.date) {
-              const [y, m, d] = entry.date.split("-").map(x => parseInt(x, 10));
-              state.selectedDate = new Date(y, m - 1, d);
-              state.cal = new Date(y, m - 1, 1);
-              updateSelectedDateDisplay();
-              renderCalendar();
-          }
-          reflectCurrent();
-      }
+      // function loadEntry(id) {
+      //     state.cursor = id;
+      //     const entry = state.entries.find(e => e.id === id);
+      //     if (entry && entry.date) {
+      //         const [y, m, d] = entry.date.split("-").map(x => parseInt(x, 10));
+      //         state.selectedDate = new Date(y, m - 1, d);
+      //         state.cal = new Date(y, m - 1, 1);
+      //         updateSelectedDateDisplay();
+      //         renderCalendar();
+      //     }
+      //     reflectCurrent();
+      // }
   
       function renderGallery() {
           try {
