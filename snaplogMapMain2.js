@@ -867,11 +867,13 @@ window.changeSlide = function(sliderId, direction) {
         }).addTo(leafletMap);
   
         markerCluster = L.markerClusterGroup({
-          spiderfyOnMaxZoom: true,
-          showCoverageOnHover: false,
-          zoomToBoundsOnClick: true,
-          maxClusterRadius: 60
-        });
+  spiderfyOnMaxZoom: true,  // ✅ 최대 줌에서 거미줄 펼치기 활성화
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: true,  // ✅ 클릭 시 자동 확대
+  maxClusterRadius: 60,
+  disableClusteringAtZoom: 18,  // ✅ 줌 레벨 18에서 클러스터링 해제
+  spiderfyDistanceMultiplier: 2  // ✅ 거미줄 간격 (기본값보다 넓게)
+});
         leafletMap.addLayer(markerCluster);
   
         loadMarkersToMap().then(() => {
