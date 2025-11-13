@@ -1264,7 +1264,7 @@ FALLBACKS = [
 # ---------------- HTML ----------------
 @app.get("/")
 def index():
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Snaplog_test4+map.html")
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
     if not os.path.exists(html_path):
         return f"Error: {html_path} 가 없습니다.", 404
     return send_file(html_path)
