@@ -2,7 +2,7 @@
   "use strict";
 
   // ================== 설정 ==================
-  const API_URL = "http://127.0.0.1:5000/api/auto-diary";
+  const API_URL = "https://snaplog.onrender.com/api/auto-diary";
   const FOOD_HINTS = [
     "food","meal","lunch","dinner","breakfast","cafe","coffee","cake","bread",
     "noodle","ramen","pizza","burger","pasta","sushi","식당","밥","점심","저녁",

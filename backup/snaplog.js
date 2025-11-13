@@ -2,7 +2,7 @@
   "use strict";
 
   // ================== 설정 ==================
-  const API_URL = "http://127.0.0.1:5000/api/auto-diary";
+  const API_URL = "https://snaplog.onrender.com/api/auto-diary";
   const FOOD_HINTS = [
     "food",
     "meal",
