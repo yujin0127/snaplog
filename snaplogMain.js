@@ -926,8 +926,26 @@
           updatePreviewFromView(); 
         } 
       });
-      
-      loadEntriesToState();
+
+     const urlParams = new URLSearchParams(window.location.search);
+      const editId = urlParams.get('edit');
+      if (editId) {
+        window.history.replaceState({}, '', './index.html');
+        
+        loadEntriesToState().then(() => {
+          const entry = state.entries.find(e => e.id === editId);
+          if (entry) {
+            loadEntry(editId);
+            
+            const intro = $("#intro");
+            const app = $("#app");
+            if (intro) intro.style.display = "none";
+            if (app) app.style.display = "block";
+          }
+        });
+      } else {
+        loadEntriesToState();
+      }
     });
   
     // ✅ loadEntry 함수를 여기로 이동 (IIFE 안쪽, window.addEventListener 밖)
