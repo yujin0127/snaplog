@@ -657,7 +657,24 @@
       async function loadEntriesToState(){
           state.entries = await getAllFromIDB();
           renderAll();
-      }
+
+          // ✅ 추가: URL에서 edit 파라미터 확인
+    const urlParams = new URLSearchParams(window.location.search);
+    const editId = urlParams.get('edit');
+    if (editId) {
+        window.history.replaceState({}, '', './index.html');
+        
+        const entry = state.entries.find(e => e.id === editId);
+        if (entry) {
+            loadEntry(editId);
+            
+            const intro = $("#intro");
+            const app = $("#app");
+            if (intro) intro.style.display = "none";
+            if (app) app.style.display = "block";
+        }
+    }
+}
   
       // ================== 초기 바인딩 ==================
       window.addEventListener("DOMContentLoaded", () => {
@@ -927,25 +944,26 @@
         } 
       });
 
-     const urlParams = new URLSearchParams(window.location.search);
-      const editId = urlParams.get('edit');
-      if (editId) {
-        window.history.replaceState({}, '', './index.html');
+     // const urlParams = new URLSearchParams(window.location.search);
+     //  const editId = urlParams.get('edit');
+     //  if (editId) {
+     //    window.history.replaceState({}, '', './index.html');
         
-        loadEntriesToState().then(() => {
-          const entry = state.entries.find(e => e.id === editId);
-          if (entry) {
-            loadEntry(editId);
+     //    loadEntriesToState().then(() => {
+     //      const entry = state.entries.find(e => e.id === editId);
+     //      if (entry) {
+     //        loadEntry(editId);
             
-            const intro = $("#intro");
-            const app = $("#app");
-            if (intro) intro.style.display = "none";
-            if (app) app.style.display = "block";
-          }
-        });
-      } else {
-        loadEntriesToState();
-      }
+     //        const intro = $("#intro");
+     //        const app = $("#app");
+     //        if (intro) intro.style.display = "none";
+     //        if (app) app.style.display = "block";
+     //      }
+     //    });
+     //  } else {
+     //    loadEntriesToState();
+     //  }
+          loadEntriesToState();
     });
   
     // ✅ loadEntry 함수를 여기로 이동 (IIFE 안쪽, window.addEventListener 밖)
