@@ -73,22 +73,29 @@
   
       // ================== ✅ CosmosDB API 함수로 변경 ==================
       async function saveEntryToAPI(entry){
-          try {
-              const response = await window.snaplogAuth.apiRequest('/api/diaries', {
-                  method: 'POST',
-                  body: JSON.stringify(entry)
-              });
-              
-              if (response && response.ok) {
-                  return true;
-              } else {
-                  throw new Error(response?.message || '저장 실패');
-              }
-          } catch (error) {
-              console.error('일기 저장 실패:', error);
-              throw error;
-          }
-      }
+    try {
+        // ✅ entry.id가 이미 존재하는 일기인지 확인
+        const isUpdate = state.entries.some(e => e.id === entry.id);
+        
+        // ✅ 수정이면 PUT, 신규면 POST
+        const method = isUpdate ? 'PUT' : 'POST';
+        const url = isUpdate ? `/api/diaries/${entry.id}` : '/api/diaries';
+        
+        const response = await window.snaplogAuth.apiRequest(url, {
+            method: method,
+            body: JSON.stringify(entry)
+        });
+        
+        if (response && response.ok) {
+            return true;
+        } else {
+            throw new Error(response?.message || '저장 실패');
+        }
+    } catch (error) {
+        console.error('일기 저장 실패:', error);
+        throw error;
+    }
+}
   
       async function getAllFromAPI(){
           try {
@@ -651,12 +658,75 @@
         updateCurrentDateEntries();
       }
   
-      // ✅ API에서 데이터 로드
-      async function loadEntriesToState(){
-          state.entries = await getAllFromAPI();
-          renderAll();
-      }
-  
+      // ============================================
+        // snaplogMain.js 수정
+        // loadEntriesToState() 함수를 이렇게 변경하세요
+        // ============================================
+
+        // ✅ API에서 데이터 로드
+        async function loadEntriesToState(){
+            state.entries = await getAllFromAPI();
+            renderAll();
+            
+            // ✅ URL 파라미터로 특정 일기 로드
+            loadDiaryByURLParams();
+        }
+
+        // ✅ 수정된 함수 (ID 파라미터 처리 추가)
+        function loadDiaryByURLParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const dateParam = urlParams.get('date');
+            const idParam = urlParams.get('id');
+            
+            if (!dateParam) return;
+            
+            console.log('URL 파라미터:', { date: dateParam, id: idParam });
+            
+            // 날짜 설정
+            const [y, m, d] = dateParam.split('-').map(x => parseInt(x, 10));
+            state.selectedDate = new Date(y, m - 1, d);
+            state.cal = new Date(y, m - 1, 1);
+            
+            // 해당 날짜의 일기들
+            const dateEntries = state.entries
+                .filter(e => e.date === dateParam)
+                .sort((a, b) => (b.tn || 0) - (a.tn || 0));
+            
+            if (dateEntries.length === 0) {
+                console.log('해당 날짜의 일기 없음:', dateParam);
+                window.history.replaceState({}, '', '/');
+                return;
+            }
+            
+            // ID가 있으면 특정 일기 로드, 없으면 최신 일기 로드
+            let targetEntry;
+            if (idParam) {
+                targetEntry = dateEntries.find(e => e.id === idParam);
+                if (!targetEntry) {
+                    console.warn('해당 ID의 일기를 찾을 수 없음:', idParam);
+                    targetEntry = dateEntries[0]; // 못 찾으면 최신 일기
+                }
+            } else {
+                targetEntry = dateEntries[0]; // ID 없으면 최신 일기
+            }
+            
+            // 일기 로드
+            state.cursor = targetEntry.id;
+            const idx = dateEntries.findIndex(e => e.id === targetEntry.id);
+            state.currentDateEntryIndex = idx >= 0 ? idx : 0;
+            
+            // 화면 업데이트
+            renderAll();
+            
+            // URL 파라미터 제거 (깔끔하게)
+            window.history.replaceState({}, '', '/');
+            
+            console.log('일기 로드 완료:', targetEntry.title);
+        }
+            
+      
+      
+
       // ================== 초기 바인딩 ==================
       window.addEventListener("DOMContentLoaded", () => {
           const autoModal = $("#autoModal");
@@ -806,39 +876,54 @@
       }
   
       // ✅ 저장 버튼 - API 사용
-      $('#saveBtn').addEventListener('click', async ()=>{
-          try{
-          const body = ($('#text')?.value || '').trim();
-          const title = ($('#title')?.value || '제목 없음').slice(0,20);
-          if(!body){ alert('내용이 비어있습니다'); return; }
-  
-          const entry = {
-              id: state.cursor || newId(),
-              title,
-              text: body,  // ✅ body → text 로 서버와 맞춤
-              photo: state.tempPhotos[state.repIndex] || '',
-              photos: state.tempPhotos.slice(0, MAX_UPLOAD),
-              photoItems: state.photoItems.slice(0, MAX_UPLOAD),
-              repIndex: state.repIndex,
-              date: formatDate(state.selectedDate),
-              ts: state.selectedDate.getTime(),
-              tn: Date.now()
-          };
-  
-          await saveEntryToAPI(entry);
-          state.cursor = entry.id;
-          state.entries = await getAllFromAPI();
-          renderAll();
-          
-          window.dispatchEvent(new CustomEvent('entrySaved'));
-          
-          alert('저장되었습니다.');
-          }catch(e){
-          console.error(e);
-          alert('저장 중 오류 발생: ' + e.message);
-          }
-      });
-    
+      // ✅ 저장 버튼 - 수정 모드 지원
+        $('#saveBtn').addEventListener('click', async ()=>{
+            try{
+                const body = ($('#text')?.value || '').trim();
+                const title = ($('#title')?.value || '제목 없음').slice(0,20);
+                if(!body){ alert('내용이 비어있습니다'); return; }
+
+                // ✅ 수정 모드: cursor가 있으면 기존 일기 ID 유지
+                // ✅ 신규 모드: cursor가 없으면 새 ID 생성
+                const entryId = state.cursor || newId();
+                const isEditMode = !!state.cursor; // cursor가 있으면 수정 모드
+
+                const entry = {
+                    id: entryId,
+                    title,
+                    text: body,
+                    photo: state.tempPhotos[state.repIndex] || '',
+                    photos: state.tempPhotos.slice(0, MAX_UPLOAD),
+                    photoItems: state.photoItems.slice(0, MAX_UPLOAD),
+                    repIndex: state.repIndex,
+                    date: formatDate(state.selectedDate),
+                    ts: state.selectedDate.getTime(),
+                    tn: Date.now() // 수정 시간은 항상 현재 시간
+                };
+
+                await saveEntryToAPI(entry);
+                
+                // ✅ 저장 후 cursor 유지 (수정 모드 유지)
+                state.cursor = entry.id;
+                
+                // 목록 새로고침
+                state.entries = await getAllFromAPI();
+                renderAll();
+                
+                window.dispatchEvent(new CustomEvent('entrySaved'));
+                
+                // ✅ 수정/신규 구분하여 메시지 표시
+                if(isEditMode) {
+                    alert('일기가 수정되었습니다.');
+                } else {
+                    alert('새 일기가 저장되었습니다.');
+                }
+            }catch(e){
+                console.error(e);
+                alert('저장 중 오류 발생: ' + e.message);
+            }
+        });
+            
       // ✅ 삭제 버튼 - API 사용
       $('#delBtn').addEventListener('click', async ()=>{
           if(!state.cursor){ alert('삭제할 일기를 선택하세요'); return; }

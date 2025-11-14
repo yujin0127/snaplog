@@ -255,13 +255,30 @@ def get_user_by_id(user_id: str) -> dict | None:
 
 def save_diary(user_id: str, diary_text: str, title: str = "제목 없음", 
                diary_date: str = "", images: list = None, 
-               photo_items: list = None, metadata: dict = None) -> dict:
-    """사용자 일기 저장"""
+               photo_items: list = None, metadata: dict = None,
+               diary_id: str = None) -> dict:
+    """사용자 일기 저장 (신규/수정 통합)"""
     try:
         from datetime import datetime
         
-        # 일기 ID 생성
-        diary_id = f"diary_{int(datetime.utcnow().timestamp())}_{hash(user_id) % 10000}"
+        # ✅ 기존 일기 조회 (수정 모드 판단)
+        is_update = False
+        existing_diary = None
+        
+        if diary_id:
+            try:
+                existing_diary = diaries_container.read_item(
+                    item=diary_id,
+                    partition_key=user_id
+                )
+                is_update = True
+            except Exception:
+                # 존재하지 않으면 신규 생성
+                pass
+        
+        # ✅ ID 결정: 전달된 diary_id가 있으면 사용, 없으면 새로 생성
+        if not diary_id:
+            diary_id = f"diary_{int(datetime.utcnow().timestamp())}_{hash(user_id) % 10000}"
         
         # 날짜가 없으면 오늘 날짜 사용
         if not diary_date:
@@ -289,24 +306,25 @@ def save_diary(user_id: str, diary_text: str, title: str = "제목 없음",
                 
                 simplified_items.append(simplified_item)
         
-        # 일기 데이터 생성
+        # ✅ 일기 데이터 생성 (수정 시 기존 생성 시간 유지)
         diary_data = {
             'id': diary_id,
             'userId': user_id,
             'title': title,
             'text': diary_text,
             'date': diary_date,
-            'photos': images or [],  # ✅ photos만 저장!
-            'photoItems': simplified_items,  # ✅ 간소화된 버전!
+            'photos': images or [],
+            'photoItems': simplified_items,
             'metadata': metadata or {},
-            'created_at': datetime.utcnow().isoformat(),
+            'created_at': existing_diary['created_at'] if existing_diary else datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat()
         }
         
-        # CosmosDB에 저장
-        diaries_container.create_item(body=diary_data)
+        # ✅ CosmosDB에 저장 (upsert로 신규/수정 통합)
+        diaries_container.upsert_item(body=diary_data)
         
-        return {'ok': True, 'diary_id': diary_id, 'message': '일기가 저장되었습니다.'}
+        action = '수정' if is_update else '저장'
+        return {'ok': True, 'diary_id': diary_id, 'message': f'일기가 {action}되었습니다.'}
         
     except Exception as e:
         print(f"❌ 일기 저장 실패: {e}")
@@ -689,3 +707,59 @@ def reset_password_with_token(token: str, new_password: str) -> dict:
     except Exception as e:
         print(f"❌ 비밀번호 재설정 실패: {e}")
         return {'ok': False, 'error': 'server_error', 'message': str(e)}
+    
+
+def update_diary(diary_id: str, user_id: str, diary_text: str, 
+                 title: str = "", diary_date: str = "", 
+                 images: list = None, photo_items: list = None, 
+                 metadata: dict = None) -> dict:
+    """기존 일기 수정"""
+    try:
+        if not diaries_container:
+            return {'ok': False, 'error': 'db_not_initialized'}
+        
+        # 기존 일기 조회
+        try:
+            existing = diaries_container.read_item(
+                item=diary_id,
+                partition_key=user_id
+            )
+        except Exception:
+            return {'ok': False, 'error': 'not_found', 'message': '일기를 찾을 수 없습니다.'}
+        
+        # 수정된 일기 데이터 구성
+        updated_diary = {
+            'id': diary_id,  # ✅ 기존 ID 유지
+            'userId': user_id,
+            'title': title,
+            'text': diary_text,
+            'date': diary_date or existing.get('date', ''),
+            'photos': images or [],
+            'photoItems': photo_items or [],
+            'repIndex': (metadata or {}).get('repIndex', 0),
+            'category': (metadata or {}).get('category', ''),
+            'tone': (metadata or {}).get('tone', '중립'),
+            'ts': existing.get('ts'),  # ✅ 원본 생성 시간 유지
+            'tn': (metadata or {}).get('tn', int(time.time() * 1000)),  # ✅ 수정 시간 갱신
+            'createdAt': existing.get('createdAt'),  # ✅ 원본 생성 시간 유지
+            'updatedAt': datetime.utcnow().isoformat() + 'Z'  # ✅ 수정 시간 기록
+        }
+        
+        # CosmosDB에 덮어쓰기
+        diaries_container.upsert_item(updated_diary)
+        
+        return {
+            'ok': True,
+            'message': '일기가 수정되었습니다.',
+            'diary_id': diary_id,
+            'diary': updated_diary
+        }
+        
+    except Exception as e:
+        print(f"일기 수정 실패: {e}")
+        traceback.print_exc()
+        return {
+            'ok': False,
+            'error': 'update_failed',
+            'message': str(e)
+        }

@@ -25,8 +25,6 @@
     .meta .date { font-size:12px; color:var(--muted); margin-top:4px; }
     .meta .excerpt { font-size:13px; color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .card-footer { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
-    .pager { display:flex; gap:8px; align-items:center; justify-content:center; }
-    .pager .btn { padding:8px 12px; height:40px; border-radius:10px; }
     .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.25); align-items:center; justify-content:center; padding:20px; z-index:60; }
     .modal .card { width:min(900px, 96vw); max-height:80vh; overflow:auto; }
     @media (max-width:900px){ .layout{ grid-template-columns: 1fr; } }
@@ -50,7 +48,6 @@
         </div>
         <!-- ✅ 로그아웃 버튼 추가 -->
         <button class="btn ghost" onclick="window.snaplogAuth.logout()" style="margin-left:12px;">로그아웃</button>
-        <a class="btn ghost" href="/mypage" style="text-decoration:none;">마이페이지</a>
         <a class="btn ghost" href="/" style="margin-left:12px; text-decoration: none;">작성하러 가기</a>
       </div>
 
@@ -83,11 +80,6 @@
           <div style="margin-top:12px; flex:1; display:flex; flex-direction:column;">
             <div class="results" id="results" style="flex:1; overflow:auto;"></div>
             <div class="card-footer">
-              <div class="pager" id="pager">
-                <button id="prevPage" class="btn ghost">이전</button>
-                <div id="pageInfo" class="small" style="align-self:center;"></div>
-                <button id="nextPage" class="btn ghost">다음</button>
-              </div>
               <div class="tabs">
                 <a href="/" class="tab" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; justify-content: center;">일기</a>
                 <a href="/map" class="tab" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; justify-content: center;">지도</a>
@@ -165,8 +157,6 @@
     theme: loadLS('theme','light'),
     cal: new Date(),
     filtered: [],
-    page: 1,
-    perPage: 15,
     activeKeyword: ''
   };
 
@@ -252,23 +242,17 @@
   }
   $('#closeModal')?.addEventListener('click', ()=>{ $('#modal').style.display='none'; });
 
-  function excerpt(s, n=50){ if(!s) return ''; return s.length>n? s.slice(0,n-1)+'…': s; }
+  function excerpt(s, n=30){ if(!s) return ''; return s.length>n? s.slice(0,n)+'…': s; }
 
   function renderResults(){
     const container = $('#results'); if(!container) return;
     container.innerHTML = '';
     const total = state.filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / state.perPage));
-    if(state.page > totalPages) state.page = totalPages;
 
-    const start = (state.page - 1) * state.perPage;
-    const end = start + state.perPage;
-    const pageItems = state.filtered.slice(start, end);
-
-    if(pageItems.length === 0){
+    if(total === 0){
       container.innerHTML = `<div style="text-align:center; color:var(--muted); padding:18px;">표시할 일기가 없습니다.</div>`;
     } else {
-      pageItems.forEach(e=>{
+      state.filtered.forEach(e=>{
         const row = document.createElement('div'); row.className = 'diary-row';
         const left = document.createElement('div'); left.className='diary-left';
         const img = document.createElement('img'); img.className='thumb-sm';
@@ -282,19 +266,31 @@
 
         left.appendChild(img); left.appendChild(meta);
 
-        const right = document.createElement('div');
+        const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px';
+        
         const openBtn = document.createElement('button'); openBtn.className='btn ghost'; openBtn.textContent='열기';
         openBtn.onclick = ()=> openModal(e);
+        
+        // ✅ 수정 버튼 추가
+        const editBtn = document.createElement('button'); editBtn.className='btn ghost'; editBtn.textContent='수정';
+        editBtn.onclick = ()=> {
+          // 날짜와 일기 ID로 메인 페이지 이동
+          if(e.date && e.id) {
+            window.location.href = `/?date=${e.date}&id=${e.id}`;
+          } else if(e.date) {
+            window.location.href = `/?date=${e.date}`;
+          } else {
+            window.location.href = '/';
+          }
+        };
+        
         right.appendChild(openBtn);
+        right.appendChild(editBtn);
 
         row.appendChild(left); row.appendChild(right);
         container.appendChild(row);
       });
     }
-
-    $('#pageInfo').textContent = `${state.page} / ${totalPages}`;
-    $('#prevPage').disabled = state.page <= 1;
-    $('#nextPage').disabled = state.page >= totalPages;
   }
 
   function initYearMonthFilters(){
@@ -302,6 +298,13 @@
     const monthSel = $('#filterMonth');
     const thisYear = new Date().getFullYear();
     for(let y=2021; y<=thisYear; y++){ const opt = document.createElement('option'); opt.value=y; opt.textContent=y+'년'; yearSel.appendChild(opt);}
+    
+    // ✅ '전체' 옵션 추가
+    const allOpt = document.createElement('option');
+    allOpt.value = '';
+    allOpt.textContent = '전체';
+    monthSel.appendChild(allOpt);
+    
     for(let m=1; m<=12; m++){ const opt = document.createElement('option'); opt.value=m; opt.textContent=m+'월'; monthSel.appendChild(opt);}
     yearSel.value=thisYear;
     monthSel.value=new Date().getMonth()+1;
@@ -329,20 +332,16 @@
     renderCalendar();
   }
 
-  $('#filterYear').addEventListener('change', ()=>{ state.page=1; applyFiltersAndRender(); });
-  $('#filterMonth').addEventListener('change', ()=>{ state.page=1; applyFiltersAndRender(); });
-  $('#searchInput').addEventListener('input', (ev)=>{ state.activeKeyword = ev.target.value || ''; state.page=1; applyFiltersAndRender(); });
+  $('#filterYear').addEventListener('change', ()=>{ applyFiltersAndRender(); });
+  $('#filterMonth').addEventListener('change', ()=>{ applyFiltersAndRender(); });
+  $('#searchInput').addEventListener('input', (ev)=>{ state.activeKeyword = ev.target.value || ''; applyFiltersAndRender(); });
   $('#resetBtn').addEventListener('click', ()=>{
     $('#filterYear').value = new Date().getFullYear();
     $('#filterMonth').value = new Date().getMonth()+1;
     $('#searchInput').value='';
     state.activeKeyword='';
-    state.page=1;
     applyFiltersAndRender();
   });
-
-  $('#prevPage').addEventListener('click', ()=>{ if(state.page>1){ state.page--; renderResults(); } });
-  $('#nextPage').addEventListener('click', ()=>{ const totalPages = Math.max(1, Math.ceil(state.filtered.length/state.perPage)); if(state.page<totalPages){ state.page++; renderResults(); } });
 
   $('#prevM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()-1,1); renderCalendar(); });
   $('#nextM').addEventListener('click', ()=>{ state.cal = new Date(state.cal.getFullYear(), state.cal.getMonth()+1,1); renderCalendar(); });
@@ -359,7 +358,6 @@
         return e;
       });
       state.filtered = state.entries.slice().sort((a,b)=> (b.ts||0)-(a.ts||0));
-      state.page=1;
       applyFiltersAndRender();
       console.log('✅ API에서 데이터 로드 완료:', state.entries.length, '개');
     }catch(e){

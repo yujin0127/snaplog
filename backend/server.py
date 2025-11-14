@@ -25,7 +25,8 @@ from auth_cosmos import (
     save_reset_token,
     verify_reset_token,
     reset_password_with_token,
-    init_verifications_container # ✅ 추가!
+    init_verifications_container,
+    update_diary # ✅ 추가!
 )
 import os, re, json, random, traceback, time, io, base64, uuid
 from threading import Lock
@@ -1823,6 +1824,74 @@ def api_save_diary():
             'error': 'server_error',
             'message': str(e)
         }), 500
+        
+
+@app.put("/api/diaries/<diary_id>")
+@login_required
+def api_update_diary(diary_id):
+    """일기 수정 API"""
+    try:
+        data = request.get_json(silent=True) or {}
+        
+        # 기존 일기 존재 확인
+        existing_diary = get_diary_by_id(diary_id, request.user_id)
+        if not existing_diary:
+            return jsonify({
+                'ok': False,
+                'error': 'not_found',
+                'message': '수정할 일기를 찾을 수 없습니다.'
+            }), 404
+        
+        # 필수 필드 확인
+        diary_text = data.get("text") or data.get("body") or ""
+        if not diary_text.strip():
+            return jsonify({
+                'ok': False,
+                'error': 'missing_text',
+                'message': '일기 내용을 입력해주세요.'
+            }), 400
+        
+        # 수정할 데이터 추출
+        title = data.get("title", "제목 없음")[:20]
+        photos = data.get("photos", [])
+        photo_items = data.get("photoItems", [])
+        rep_index = data.get("repIndex", 0)
+        diary_date = data.get("date", existing_diary.get("date", ""))
+        
+        # 메타데이터 구성 (기존 값 유지 + 새 값 병합)
+        metadata = {
+            'category': data.get('category', existing_diary.get('category', '')),
+            'tone': data.get('tone', existing_diary.get('tone', '중립')),
+            'repIndex': rep_index,
+            'ts': existing_diary.get('ts'),  # ✅ 원본 생성 시간 유지
+            'tn': data.get('tn', int(time.time() * 1000))  # ✅ 수정 시간 갱신
+        }
+        
+        # ✅ 기존 ID로 덮어쓰기 (save_diary가 upsert 지원)
+        result = save_diary(
+            user_id=request.user_id,
+            diary_text=diary_text,
+            title=title,
+            diary_date=diary_date,
+            images=photos,
+            photo_items=photo_items,
+            metadata=metadata,
+            diary_id=diary_id  # ✅ 기존 ID 전달
+        )
+        
+        if result['ok']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'ok': False,
+            'error': 'server_error',
+            'message': str(e)
+        }), 500
+
 
 @app.get("/api/diaries/<diary_id>")
 @login_required
